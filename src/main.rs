@@ -14,13 +14,13 @@ fn main() {
 
     for stream in listener.incoming() {
         match stream {
-            Ok(stream) => {
+            Ok(mut stream) => {
                 let mut s = String::new();
-                let msg = stream.read_to_string(s).unwrap();
+                let msg = stream.read_to_string(&mut s).unwrap();
                 if s == "PING" {
                     let resp = String::from("+PONG\r\n");
                     let bytes = resp.bytes().collect::<Vec<u8>>();
-                    stream.write(&bytes);
+                    stream.write_all(&bytes).unwrap();
                 }
             }
             Err(e) => {
