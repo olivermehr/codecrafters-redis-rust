@@ -21,6 +21,7 @@ fn main() {
                     let resp = String::from("+PONG\r\n");
                     let bytes = resp.bytes().collect::<Vec<u8>>();
                     stream.write_all(&bytes).unwrap();
+                    stream.flush().unwrap();
                 }
             }
             Err(e) => {
