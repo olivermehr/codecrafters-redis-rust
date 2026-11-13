@@ -14,6 +14,7 @@ async fn main() {
         match stream {
             Ok(mut stream) => {
                 tokio::spawn(async move {
+                    println!("spawing connection");
                     let mut buf = [0; 128];
                     while let Ok(bytes) = stream.read(&mut buf)
                         && bytes != 0
