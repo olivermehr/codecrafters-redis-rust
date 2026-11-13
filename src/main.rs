@@ -14,8 +14,9 @@ fn main() {
             Ok(mut stream) => {
                 let mut buf = [0; 128];
                 let _ = stream.read(&mut buf).unwrap();
-                let s = String::from_utf8(buf.to_vec()).unwrap();
-                println!("{s}");
+                let s = String::from_utf8(buf.to_vec())
+                    .unwrap()
+                    .to_ascii_lowercase();
                 if s.contains("ping") {
                     println!("entering the ping block");
                     let _ = stream
