@@ -12,15 +12,15 @@ fn main() {
     for stream in listener.incoming() {
         match stream {
             Ok(mut stream) => {
-                let mut s = String::new();
-                let msg = stream.read_to_string(&mut s).unwrap();
-                println!("{}",s);
-                if s == "PING" {
-                    let resp = String::from("+PONG\r\n");
-                    let bytes = resp.bytes().collect::<Vec<u8>>();
-                    stream.write_all(&bytes).unwrap();
-                    stream.flush().unwrap();
-                    
+                let mut buf = [0; 128];
+                let _ = stream.read(&mut buf).unwrap();
+                let s = String::from_utf8(buf.to_vec()).unwrap();
+
+                if s.contains("ping") {
+                    println!("entering the ping block");
+                    let _ = stream
+                        .write(&String::from("+PONG\r\n").into_bytes())
+                        .unwrap();
                 }
             }
             Err(e) => {
