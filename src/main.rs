@@ -9,12 +9,13 @@ use tokio::net::TcpSocket;
 #[tokio::main]
 async fn main() {
     let listener = TcpListener::bind("127.0.0.1:6379").unwrap();
-
+    let mut count = 0;
     for stream in listener.incoming() {
         match stream {
             Ok(mut stream) => {
+                count += 1;
                 tokio::spawn(async move {
-                    println!("spawing connection");
+                    println!("spawing connection {}", count);
                     let mut buf = [0; 128];
                     while let Ok(bytes) = stream.read(&mut buf)
                         && bytes != 0
