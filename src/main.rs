@@ -1,31 +1,30 @@
 #![allow(unused_imports)]
-use std::{
-    io::{BufReader, Read, Write},
-    net::TcpListener,
-};
 
-use tokio::net::TcpSocket;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::{TcpListener, TcpSocket},
+};
 
 #[tokio::main]
 async fn main() {
-    let listener = TcpListener::bind("127.0.0.1:6379").unwrap();
-    let mut count = 0;
-    for stream in listener.incoming() {
-        match stream {
-            Ok(mut stream) => {
-                count += 1;
+    let listener = TcpListener::bind("127.0.0.1:6379").await.unwrap();
+    loop {
+        match listener.accept().await {
+            Ok((mut stream, _)) => {
                 tokio::spawn(async move {
-                    println!("spawing connection {}", count);
                     let mut buf = [0; 128];
-                    while let Ok(bytes) = stream.read(&mut buf)
+                    while let Ok(bytes) = stream.read(&mut buf).await
                         && bytes != 0
                     {
-                        let s = String::from_utf8(buf.to_vec())
-                            .unwrap()
-                            .to_ascii_lowercase();
+                        let s = String::from_utf8_lossy(&buf[..bytes])
+                            .into_owned()
+                            .to_lowercase();
                         println!("{s}");
-                        for _ in s.split("*1\r\n$4\r\nPING\r\n") {
-                            let _ = stream.write_all(&String::from("+PONG\r\n").into_bytes());
+
+                        for _ in s.match_indices("ping") {
+                            let _ = stream
+                                .write_all(&String::from("+PONG\r\n").into_bytes())
+                                .await;
                         }
                     }
                 });
