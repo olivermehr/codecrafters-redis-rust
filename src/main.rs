@@ -54,6 +54,18 @@ async fn main() {
     }
 }
 
+fn format_simple_string(mut s: String) -> String {
+    s.insert(0, '+');
+    s.push_str("\r\n");
+    s
+}
+fn format_bulk_string(mut s: String) -> String {
+    let len = s.len();
+    s.insert_str(0, &format!("${}\r\n", len));
+    s.push_str("\r\n");
+    s
+}
+
 fn visit<'a>(node: RespNode) -> Option<String> {
     match node {
         RespNode::Array(v) => {
@@ -61,15 +73,12 @@ fn visit<'a>(node: RespNode) -> Option<String> {
             if let Some(fn_name) = v.next() {
                 let fn_name = visit(fn_name).unwrap();
                 if fn_name == "ping" {
-                    Some(String::from("+PONG\r\n"))
+                    Some(format_simple_string(String::from("+PONG\r\n")))
                 } else if fn_name == "echo"
                     && let Some(param) = v.next()
                 {
-                    let mut value = visit(param).unwrap();
-
-                    value.insert_str(0, &format!("${}\r\n", value.len()));
-                    value.push_str("\r\n");
-                    Some(value)
+                    let value = visit(param).unwrap();
+                    Some(format_bulk_string(value))
                 } else {
                     panic!("unsupported fn name")
                 }
