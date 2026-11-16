@@ -45,7 +45,7 @@ impl RespServer {
                             (key, value)
                         {
                             self.storage.lock().unwrap().insert(k.clone(), v.clone());
-                            Some(format_simple_string(String::from("Ok")))
+                            Some(format_simple_string(String::from("OK")))
                         } else {
                             None
                         }
