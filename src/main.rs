@@ -5,7 +5,7 @@ use std::{
     borrow::Cow,
     collections::HashMap,
     ops::Add,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard},
     time::Duration,
 };
 
@@ -24,8 +24,29 @@ mod resp;
 
 #[derive(Debug, Clone)]
 struct RespServer {
-    storage: Arc<Mutex<HashMap<String, String>>>,
+    storage: Arc<Mutex<HashMap<String, StorageType>>>,
 }
+
+#[derive(Debug, Clone)]
+enum StorageType {
+    String(String),
+    List(Vec<String>),
+}
+
+impl From<String> for StorageType {
+    fn from(value: String) -> Self {
+        Self::String(value)
+    }
+}
+impl From<StorageType> for String {
+    fn from(value: StorageType) -> Self {
+        match value {
+            StorageType::String(s) => s,
+            _ => panic!("unsupported string conversion"),
+        }
+    }
+}
+
 impl RespServer {
     fn new() -> Self {
         Self {
@@ -45,7 +66,6 @@ impl RespServer {
                 let key = get_bulk_string_arg(v.next())?;
                 let value = get_bulk_string_arg(v.next())?;
                 while let Some(arg) = get_bulk_string_arg_optional(v.next()) {
-                    println!("{}", arg);
                     if arg == "ex" {
                         let num = get_bulk_string_arg(v.next())?;
                         tx.send(Expiry {
@@ -65,16 +85,28 @@ impl RespServer {
                         .unwrap();
                     }
                 }
-                self.storage.lock().unwrap().insert(key, value);
+                self.storage.lock().unwrap().insert(key, value.into());
                 Ok(format_simple_string(String::from("OK")))
             } else if fn_name == "get" {
                 let key = get_bulk_string_arg(v.next())?;
                 let value = self.storage.lock().unwrap().get(&key).cloned();
                 if let Some(v) = value {
-                    Ok(format_bulk_string(v))
+                    Ok(format_bulk_string(v.into()))
                 } else {
                     Ok(null_string())
                 }
+            } else if fn_name == "rpush" {
+                let key = get_bulk_string_arg(v.next())?;
+                let val = get_bulk_string_arg(v.next())?;
+                let mut map = self.storage.lock().unwrap();
+                let list = map.entry(key).or_insert(StorageType::List(Vec::new()));
+
+                if let StorageType::List(l) = list {
+                    l.push(val);
+                    let new_len = l.len();
+                    return Ok(integer_string(new_len as isize));
+                }
+                panic!("shouldnt reach here")
             } else {
                 panic!("unsupported fn name")
             }
@@ -180,6 +212,10 @@ fn null_string() -> String {
 
 fn error_string(error: &str) -> String {
     format!("-{error}\r\n")
+}
+
+fn integer_string(n: isize) -> String {
+    format!(":{n}\r\n")
 }
 
 fn get_bulk_string_arg(node: Option<&RespNode>) -> Result<String, RespError> {
