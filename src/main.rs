@@ -161,6 +161,9 @@ impl RespServer {
                     for _ in 0..pop_num {
                         items.push(format_bulk_string(l.pop_front().unwrap()));
                     }
+                    if pop_num == 1 {
+                        return Ok(items.into_iter().next().unwrap().0);
+                    }
                     return Ok(format_array(items));
                 }
                 Ok(format_null_string())
