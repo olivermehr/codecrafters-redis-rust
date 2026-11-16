@@ -1,5 +1,7 @@
 #![allow(unused_imports)]
 
+use std::borrow::Cow;
+
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpSocket},
@@ -26,11 +28,11 @@ async fn main() {
                         println!("before parse {s}");
                         let mut parser = RespParser::new(s.chars().collect());
                         let tree = parser.create_tree();
-                        println!("tree {:?}",tree);
+                        println!("tree {:?}", tree);
 
                         match tree {
                             Ok(nodes) => {
-                                for node in nodes.iter() {
+                                for node in nodes {
                                     match visit(node) {
                                         Some(s) => {
                                             println!("{s}");
@@ -52,17 +54,21 @@ async fn main() {
     }
 }
 
-fn visit(node: &RespNode) -> Option<&str> {
+fn visit<'a>(node: RespNode) -> Option<String> {
     match node {
         RespNode::Array(v) => {
-            if let Some(first) = v.first() {
-                let fn_name = visit(first).unwrap();
+            let mut v = v.into_iter();
+            if let Some(fn_name) = v.next() {
+                let fn_name = visit(fn_name).unwrap();
                 if fn_name == "ping" {
-                    Some("+PONG\r\n")
+                    Some(String::from("+PONG\r\n"))
                 } else if fn_name == "echo"
-                    && let Some(param) = v.get(1)
+                    && let Some(param) = v.next()
                 {
-                    visit(param)
+                    let mut value = visit(param).unwrap();
+                    value.insert(0, '+');
+                    value.push_str("\r\n");
+                    Some(value)
                 } else {
                     panic!("unsupported fn name")
                 }
@@ -73,4 +79,9 @@ fn visit(node: &RespNode) -> Option<&str> {
         RespNode::BulkString(s) => Some(s),
         RespNode::SimpleString(s) => Some(s),
     }
+}
+
+#[derive(Debug)]
+enum RespResponse {
+    SimpleString(String),
 }
