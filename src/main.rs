@@ -1,90 +1,123 @@
 #![allow(unused_imports)]
 
+use core::error;
 use std::{
     borrow::Cow,
     collections::HashMap,
+    ops::Add,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
+use chrono::{DateTime, Utc};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpSocket},
+    sync::mpsc::{self, Receiver, Sender},
 };
 
-use crate::resp::parser::{RespNode, RespParser};
+use crate::resp::{
+    error::RespError,
+    parser::{RespNode, RespParser},
+};
 mod resp;
 
 #[derive(Debug, Clone)]
 struct RespServer {
     storage: Arc<Mutex<HashMap<String, String>>>,
 }
-
 impl RespServer {
     fn new() -> Self {
         Self {
             storage: Arc::new(Mutex::new(HashMap::new())),
         }
     }
-    fn visit(&mut self, node: &RespNode) -> Option<String> {
-        match node {
-            RespNode::Array(v) => {
-                let mut v = v.into_iter();
-                if let Some(fn_name) = v.next() {
-                    let fn_name = self.visit(fn_name).unwrap();
-                    if fn_name == "ping" {
-                        Some(format_simple_string(String::from("PONG")))
-                    } else if fn_name == "echo"
-                        && let Some(param) = v.next()
-                    {
-                        let value = self.visit(param).unwrap();
-                        Some(format_bulk_string(value))
-                    } else if fn_name == "set" {
-                        let key = v.next();
-                        let value = v.next();
-                        if let (Some(RespNode::BulkString(k)), Some(RespNode::BulkString(v))) =
-                            (key, value)
-                        {
-                            self.storage.lock().unwrap().insert(k.clone(), v.clone());
-                            Some(format_simple_string(String::from("OK")))
-                        } else {
-                            None
-                        }
-                    } else if fn_name == "get" {
-                        println!("{:?}", self.storage);
-                        let key = v.next();
-                        if let Some(RespNode::BulkString(s)) = key {
-                            println!("{s}");
-                            let value = self.storage.lock().unwrap().get(s).cloned();
-                            if let Some(v) = value {
-                                println!("{v}");
-                                Some(format_bulk_string(v))
-                            } else {
-                                Some(null_string())
-                            }
-                        } else {
-                            None
-                        }
-                    } else {
-                        panic!("unsupported fn name")
+    async fn visit(&mut self, node: &RespNode, tx: Sender<Expiry>) -> Result<String, RespError> {
+        if let RespNode::Array(v) = node {
+            let mut v = v.iter();
+            let fn_name = get_bulk_string_arg(v.next())?;
+            if fn_name == "ping" {
+                Ok(format_simple_string(String::from("PONG")))
+            } else if fn_name == "echo" {
+                let value = get_bulk_string_arg(v.next())?;
+                Ok(format_bulk_string(value))
+            } else if fn_name == "set" {
+                let key = get_bulk_string_arg(v.next())?;
+                let value = get_bulk_string_arg(v.next())?;
+                while let Some(arg) = get_bulk_string_arg_optional(v.next()) {
+                    println!("{}", arg);
+                    if arg == "ex" {
+                        let num = get_bulk_string_arg(v.next())?;
+                        tx.send(Expiry {
+                            key: key.clone(),
+                            millis: num.parse::<u64>().map_err(|e| RespError::IncorrectParams)?
+                                * 1000,
+                        })
+                        .await
+                        .unwrap();
+                    } else if arg == "px" {
+                        let num = get_bulk_string_arg(v.next())?;
+                        tx.send(Expiry {
+                            key: key.clone(),
+                            millis: num.parse().map_err(|e| RespError::IncorrectParams)?,
+                        })
+                        .await
+                        .unwrap();
                     }
-                } else {
-                    None
                 }
+                self.storage.lock().unwrap().insert(key, value);
+                Ok(format_simple_string(String::from("OK")))
+            } else if fn_name == "get" {
+                let key = get_bulk_string_arg(v.next())?;
+                let value = self.storage.lock().unwrap().get(&key).cloned();
+                if let Some(v) = value {
+                    Ok(format_bulk_string(v))
+                } else {
+                    Ok(null_string())
+                }
+            } else {
+                panic!("unsupported fn name")
             }
-            RespNode::BulkString(s) => Some(s.clone()),
-            RespNode::SimpleString(s) => Some(s.clone()),
+        } else {
+            Err(RespError::InvalidSyntax)
         }
     }
+}
+
+struct Expiry {
+    key: String,
+    millis: u64,
 }
 
 #[tokio::main]
 async fn main() {
     let listener = TcpListener::bind("127.0.0.1:6379").await.unwrap();
     let server = RespServer::new();
+    let (tx, mut rx) = mpsc::channel::<Expiry>(50);
+    tokio::spawn({
+        let cloned_server = server.clone();
+        async move {
+            while let Some(expiry) = rx.recv().await {
+                tokio::spawn({
+                    let spawn_sever = cloned_server.clone();
+                    async move {
+                        tokio::time::sleep(Duration::from_millis(expiry.millis)).await;
+                        loop {
+                            if let Ok(mut map) = spawn_sever.storage.try_lock() {
+                                map.remove(&expiry.key);
+                                break;
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    });
     loop {
         match listener.accept().await {
             Ok((mut stream, _)) => {
                 let mut cloned_server = server.clone();
+                let tx_clone = tx.clone();
                 tokio::spawn(async move {
                     let mut buf = [0; 128];
                     while let Ok(bytes) = stream.read(&mut buf).await
@@ -99,11 +132,22 @@ async fn main() {
                         match tree {
                             Ok(nodes) => {
                                 for node in nodes.iter() {
-                                    match cloned_server.visit(node) {
-                                        Some(s) => {
+                                    match cloned_server.visit(node, tx_clone.clone()).await {
+                                        Ok(s) => {
                                             stream.write_all(s.as_bytes()).await.unwrap();
                                         }
-                                        None => continue,
+                                        Err(e) => {
+                                            let error = match e {
+                                                RespError::Empty => error_string("no arguments"),
+                                                RespError::IncorrectParams => {
+                                                    error_string("invalid params")
+                                                }
+                                                RespError::InvalidSyntax => {
+                                                    error_string("invalid syntax")
+                                                }
+                                            };
+                                            stream.write_all(error.as_bytes()).await.unwrap()
+                                        }
                                     }
                                 }
                             }
@@ -132,4 +176,37 @@ fn format_bulk_string(mut s: String) -> String {
 }
 fn null_string() -> String {
     String::from("$-1\r\n")
+}
+
+fn error_string(error: &str) -> String {
+    format!("-{error}\r\n")
+}
+
+fn get_bulk_string_arg(node: Option<&RespNode>) -> Result<String, RespError> {
+    if let Some(node) = node
+        && let RespNode::BulkString(s) = node
+    {
+        Ok(s.clone())
+    } else {
+        Err(RespError::IncorrectParams)
+    }
+}
+fn get_bulk_string_arg_optional(node: Option<&RespNode>) -> Option<String> {
+    if let Some(node) = node
+        && let RespNode::BulkString(s) = node
+    {
+        Some(s.clone())
+    } else {
+        None
+    }
+}
+
+fn get_integer_arg(node: Option<&RespNode>) -> Result<isize, RespError> {
+    if let Some(node) = node
+        && let RespNode::Integer(i) = node
+    {
+        Ok(*i)
+    } else {
+        Err(RespError::IncorrectParams)
+    }
 }

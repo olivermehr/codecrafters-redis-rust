@@ -7,6 +7,7 @@ pub enum RespNode {
     Array(Vec<RespNode>),
     SimpleString(String),
     BulkString(String),
+    Integer(isize),
 }
 #[derive(Debug)]
 pub struct RespParser {
@@ -113,6 +114,10 @@ impl RespParser {
             self.crlf()?;
             let s = self.bulk_string(l)?;
             Ok(RespNode::BulkString(s))
+        } else if char == ':' {
+            self.advance();
+            let int = self.integer()?;
+            Ok(RespNode::Integer(int as isize))
         } else {
             panic!("unsupported token")
         }
