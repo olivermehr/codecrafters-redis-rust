@@ -291,14 +291,14 @@ fn format_array(v: Vec<BulkString>) -> String {
 
 fn normalise_lrange_indices(len: usize, index: isize) -> usize {
     if index < 0 {
-        if index.abs() as usize > len {
+        if index.unsigned_abs() > len {
             return 0;
         }
-        len - index as usize
+        len - index.unsigned_abs()
     } else {
         if index as usize > len {
             return len - 1;
         }
-        index as usize
+        index.unsigned_abs()
     }
 }
