@@ -61,7 +61,7 @@ impl RespServer {
                 Ok(format_simple_string(String::from("PONG")))
             } else if fn_name == "echo" {
                 let value = get_bulk_string_arg(v.next())?;
-                Ok(format_bulk_string(value))
+                Ok(format_bulk_string(value).0)
             } else if fn_name == "set" {
                 let key = get_bulk_string_arg(v.next())?;
                 let value = get_bulk_string_arg(v.next())?;
@@ -91,7 +91,7 @@ impl RespServer {
                 let key = get_bulk_string_arg(v.next())?;
                 let value = self.storage.lock().unwrap().get(&key).cloned();
                 if let Some(v) = value {
-                    Ok(format_bulk_string(v.into()))
+                    Ok(format_bulk_string(v.into()).0)
                 } else {
                     Ok(null_string())
                 }
@@ -100,7 +100,6 @@ impl RespServer {
                 let mut values = Vec::new();
 
                 for val in v {
-                    println!("{:?}",val);
                     if let RespNode::BulkString(s) = val {
                         values.push(s);
                     }
@@ -114,6 +113,26 @@ impl RespServer {
                     return Ok(integer_string(new_len as isize));
                 }
                 panic!("shouldnt reach here")
+            } else if fn_name == "lrange" {
+                let list_name = get_bulk_string_arg(v.next())?;
+                let start_index: usize = get_bulk_string_arg(v.next())?.parse().unwrap();
+                let stop_index: usize = get_bulk_string_arg(v.next())?.parse().unwrap();
+                let lock = self.storage.lock().unwrap();
+                let list = lock.get(&list_name);
+                if let Some(StorageType::List(v)) = list {
+                    let len = v.len();
+                    if start_index >= len || stop_index >= len || start_index > stop_index {
+                        Ok(format_array(Vec::new()))
+                    } else {
+                        let mut bs = Vec::new();
+                        for s in v[start_index..=stop_index].iter() {
+                            bs.push(format_bulk_string(s.clone()));
+                        }
+                        Ok(format_array(bs))
+                    }
+                } else {
+                    Ok(format_array(Vec::new()))
+                }
             } else {
                 panic!("unsupported fn name")
             }
@@ -202,16 +221,18 @@ async fn main() {
     }
 }
 
+struct BulkString(String);
+
 fn format_simple_string(mut s: String) -> String {
     s.insert(0, '+');
     s.push_str("\r\n");
     s
 }
-fn format_bulk_string(mut s: String) -> String {
+fn format_bulk_string(mut s: String) -> BulkString {
     let len = s.len();
     s.insert_str(0, &format!("${}\r\n", len));
     s.push_str("\r\n");
-    s
+    BulkString(s)
 }
 fn null_string() -> String {
     String::from("$-1\r\n")
@@ -252,4 +273,16 @@ fn get_integer_arg(node: Option<RespNode>) -> Result<isize, RespError> {
     } else {
         Err(RespError::IncorrectParams)
     }
+}
+
+fn format_array(v: Vec<BulkString>) -> String {
+    let len = v.len();
+    let mut s = format!("*{len}\r\n");
+    if len == 0 {
+        return s;
+    }
+    for el in v {
+        s.push_str(&el.0);
+    }
+    s
 }
