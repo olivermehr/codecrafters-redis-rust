@@ -94,7 +94,7 @@ impl RespServer {
                 if let Some(v) = value {
                     Ok(format_bulk_string(v.into()).0)
                 } else {
-                    Ok(null_string())
+                    Ok(format_null_string())
                 }
             } else if fn_name == "rpush" || fn_name == "lpush" {
                 let key = get_bulk_string_arg(v.next())?;
@@ -145,6 +145,18 @@ impl RespServer {
                     return Ok(format_integer_string(l.len().cast_signed()));
                 }
                 Ok(format_integer_string(0))
+            } else if fn_name == "lpop" {
+                let list_name = get_bulk_string_arg(v.next())?;
+                let mut map = self.storage.lock().unwrap();
+                let list = map.get_mut(&list_name);
+                if let Some(StorageType::List(l)) = list {
+                    let el = l.pop_front();
+                    match el {
+                        Some(el) => return Ok(format_bulk_string(el).0),
+                        None => return Ok(format_null_string()),
+                    }
+                }
+                Ok(format_null_string())
             } else {
                 panic!("unsupported fn name")
             }
@@ -246,7 +258,7 @@ fn format_bulk_string(mut s: String) -> BulkString {
     s.push_str("\r\n");
     BulkString(s)
 }
-fn null_string() -> String {
+fn format_null_string() -> String {
     String::from("$-1\r\n")
 }
 
