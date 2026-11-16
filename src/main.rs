@@ -53,9 +53,9 @@ impl RespServer {
             storage: Arc::new(Mutex::new(HashMap::new())),
         }
     }
-    async fn visit(&mut self, node: &RespNode, tx: Sender<Expiry>) -> Result<String, RespError> {
+    async fn visit(&mut self, node: RespNode, tx: Sender<Expiry>) -> Result<String, RespError> {
         if let RespNode::Array(v) = node {
-            let mut v = v.iter();
+            let mut v = v.into_iter();
             let fn_name = get_bulk_string_arg(v.next())?;
             if fn_name == "ping" {
                 Ok(format_simple_string(String::from("PONG")))
@@ -97,12 +97,19 @@ impl RespServer {
                 }
             } else if fn_name == "rpush" {
                 let key = get_bulk_string_arg(v.next())?;
-                let val = get_bulk_string_arg(v.next())?;
+                let mut values = Vec::new();
+
+                for val in v {
+                    println!("{:?}",val);
+                    if let RespNode::BulkString(s) = val {
+                        values.push(s);
+                    }
+                }
                 let mut map = self.storage.lock().unwrap();
                 let list = map.entry(key).or_insert(StorageType::List(Vec::new()));
 
                 if let StorageType::List(l) = list {
-                    l.push(val);
+                    l.extend(values);
                     let new_len = l.len();
                     return Ok(integer_string(new_len as isize));
                 }
@@ -163,7 +170,7 @@ async fn main() {
 
                         match tree {
                             Ok(nodes) => {
-                                for node in nodes.iter() {
+                                for node in nodes.into_iter() {
                                     match cloned_server.visit(node, tx_clone.clone()).await {
                                         Ok(s) => {
                                             stream.write_all(s.as_bytes()).await.unwrap();
@@ -218,30 +225,30 @@ fn integer_string(n: isize) -> String {
     format!(":{n}\r\n")
 }
 
-fn get_bulk_string_arg(node: Option<&RespNode>) -> Result<String, RespError> {
+fn get_bulk_string_arg(node: Option<RespNode>) -> Result<String, RespError> {
     if let Some(node) = node
         && let RespNode::BulkString(s) = node
     {
-        Ok(s.clone())
+        Ok(s)
     } else {
         Err(RespError::IncorrectParams)
     }
 }
-fn get_bulk_string_arg_optional(node: Option<&RespNode>) -> Option<String> {
+fn get_bulk_string_arg_optional(node: Option<RespNode>) -> Option<String> {
     if let Some(node) = node
         && let RespNode::BulkString(s) = node
     {
-        Some(s.clone())
+        Some(s)
     } else {
         None
     }
 }
 
-fn get_integer_arg(node: Option<&RespNode>) -> Result<isize, RespError> {
+fn get_integer_arg(node: Option<RespNode>) -> Result<isize, RespError> {
     if let Some(node) = node
         && let RespNode::Integer(i) = node
     {
-        Ok(*i)
+        Ok(i)
     } else {
         Err(RespError::IncorrectParams)
     }
