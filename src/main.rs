@@ -3,7 +3,7 @@
 use core::error;
 use std::{
     borrow::Cow,
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     ops::Add,
     sync::{Arc, Mutex, MutexGuard},
     time::Duration,
@@ -30,7 +30,7 @@ struct RespServer {
 #[derive(Debug, Clone)]
 enum StorageType {
     String(String),
-    List(Vec<String>),
+    List(VecDeque<String>),
 }
 
 impl From<String> for StorageType {
@@ -95,20 +95,21 @@ impl RespServer {
                 } else {
                     Ok(null_string())
                 }
-            } else if fn_name == "rpush" {
+            } else if fn_name == "rpush" || fn_name == "lpush" {
                 let key = get_bulk_string_arg(v.next())?;
-                let mut values = Vec::new();
-
-                for val in v {
-                    if let RespNode::BulkString(s) = val {
-                        values.push(s);
-                    }
-                }
                 let mut map = self.storage.lock().unwrap();
-                let list = map.entry(key).or_insert(StorageType::List(Vec::new()));
-
+                let list = map.entry(key).or_insert(StorageType::List(VecDeque::new()));
                 if let StorageType::List(l) = list {
-                    l.extend(values);
+                    for val in v {
+                        if let RespNode::BulkString(s) = val {
+                            if fn_name == "rpush" {
+                                l.push_back(s);
+                            } else {
+                                l.push_front(s);
+                            }
+                        }
+                    }
+
                     let new_len = l.len();
                     return Ok(integer_string(new_len as isize));
                 }
@@ -127,7 +128,7 @@ impl RespServer {
                         Ok(format_array(Vec::new()))
                     } else {
                         let mut bs = Vec::new();
-                        for s in v[start_index..=stop_index].iter() {
+                        for s in v.range(start_index..=stop_index) {
                             bs.push(format_bulk_string(s.clone()));
                         }
                         Ok(format_array(bs))
