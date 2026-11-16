@@ -147,14 +147,21 @@ impl RespServer {
                 Ok(format_integer_string(0))
             } else if fn_name == "lpop" {
                 let list_name = get_bulk_string_arg(v.next())?;
+                let pop_num: usize = get_bulk_string_arg_optional(v.next())
+                    .map(|p| p.parse().unwrap())
+                    .unwrap_or(1);
                 let mut map = self.storage.lock().unwrap();
                 let list = map.get_mut(&list_name);
                 if let Some(StorageType::List(l)) = list {
-                    let el = l.pop_front();
-                    match el {
-                        Some(el) => return Ok(format_bulk_string(el).0),
-                        None => return Ok(format_null_string()),
+                    let pop_num = if pop_num >= l.len() { l.len() } else { pop_num };
+                    let mut items = Vec::new();
+                    if pop_num == 0 {
+                        return Ok(format_null_string());
                     }
+                    for _ in 0..pop_num {
+                        items.push(format_bulk_string(l.pop_front().unwrap()));
+                    }
+                    return Ok(format_array(items));
                 }
                 Ok(format_null_string())
             } else {
