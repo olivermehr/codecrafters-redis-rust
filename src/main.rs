@@ -53,6 +53,7 @@ impl RespServer {
             storage: Arc::new(Mutex::new(HashMap::new())),
         }
     }
+
     async fn visit(&mut self, node: RespNode, tx: Sender<Expiry>) -> Result<String, RespError> {
         if let RespNode::Array(v) = node {
             let mut v = v.into_iter();
@@ -111,7 +112,7 @@ impl RespServer {
                     }
 
                     let new_len = l.len();
-                    return Ok(integer_string(new_len as isize));
+                    return Ok(format_integer_string(new_len as isize));
                 }
                 panic!("shouldnt reach here")
             } else if fn_name == "lrange" {
@@ -136,6 +137,14 @@ impl RespServer {
                 } else {
                     Ok(format_array(Vec::new()))
                 }
+            } else if fn_name == "llen" {
+                let list_name = get_bulk_string_arg(v.next())?;
+                let map = self.storage.lock().unwrap();
+                let list = map.get(&list_name);
+                if let Some(StorageType::List(l)) = list {
+                    return Ok(format_integer_string(l.len().cast_signed()));
+                }
+                Ok(format_integer_string(0))
             } else {
                 panic!("unsupported fn name")
             }
@@ -245,7 +254,7 @@ fn error_string(error: &str) -> String {
     format!("-{error}\r\n")
 }
 
-fn integer_string(n: isize) -> String {
+fn format_integer_string(n: isize) -> String {
     format!(":{n}\r\n")
 }
 
