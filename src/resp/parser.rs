@@ -80,12 +80,10 @@ impl RespParser {
 
     fn crlf(&mut self) -> Result<(), RespError> {
         let tokens = ['\r', '\n'];
-        println!("{:?} before clrf", self.current_char);
         for i in tokens {
             if let Some(char) = self.current_char
                 && char == i
             {
-                println!("{i}");
                 self.advance();
             } else {
                 Err(RespError::InvalidSyntax)?
@@ -99,7 +97,6 @@ impl RespParser {
         if char == '*' {
             self.advance();
             let l = self.integer()?;
-            println!("{l}");
             let mut children = Vec::new();
             self.crlf()?;
             for _ in 0..l {
@@ -113,7 +110,6 @@ impl RespParser {
         } else if char == '$' {
             self.advance();
             let l = self.integer()?;
-            println!("{l}");
             self.crlf()?;
             let s = self.bulk_string(l)?;
             Ok(RespNode::BulkString(s))
