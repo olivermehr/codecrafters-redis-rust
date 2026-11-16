@@ -121,7 +121,12 @@ impl RespServer {
                 let list = lock.get(&list_name);
                 if let Some(StorageType::List(v)) = list {
                     let len = v.len();
-                    if start_index >= len || stop_index >= len || start_index > stop_index {
+                    let stop_index = if stop_index >= len {
+                        len - 1
+                    } else {
+                        stop_index
+                    };
+                    if start_index >= len || start_index > stop_index {
                         Ok(format_array(Vec::new()))
                     } else {
                         let mut bs = Vec::new();
