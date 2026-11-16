@@ -66,7 +66,8 @@ fn visit<'a>(node: RespNode) -> Option<String> {
                     && let Some(param) = v.next()
                 {
                     let mut value = visit(param).unwrap();
-                    value.insert(0, '+');
+
+                    value.insert_str(0, &format!("${}\r\n", value.len()));
                     value.push_str("\r\n");
                     Some(value)
                 } else {
