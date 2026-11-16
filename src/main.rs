@@ -73,7 +73,7 @@ fn visit<'a>(node: RespNode) -> Option<String> {
             if let Some(fn_name) = v.next() {
                 let fn_name = visit(fn_name).unwrap();
                 if fn_name == "ping" {
-                    Some(format_simple_string(String::from("PONG\r\n")))
+                    Some(format_simple_string(String::from("PONG")))
                 } else if fn_name == "echo"
                     && let Some(param) = v.next()
                 {
