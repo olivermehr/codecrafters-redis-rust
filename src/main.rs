@@ -115,17 +115,14 @@ impl RespServer {
                 panic!("shouldnt reach here")
             } else if fn_name == "lrange" {
                 let list_name = get_bulk_string_arg(v.next())?;
-                let start_index: usize = get_bulk_string_arg(v.next())?.parse().unwrap();
-                let stop_index: usize = get_bulk_string_arg(v.next())?.parse().unwrap();
+                let start_index: isize = get_bulk_string_arg(v.next())?.parse().unwrap();
+                let stop_index: isize = get_bulk_string_arg(v.next())?.parse().unwrap();
                 let lock = self.storage.lock().unwrap();
                 let list = lock.get(&list_name);
                 if let Some(StorageType::List(v)) = list {
                     let len = v.len();
-                    let stop_index = if stop_index >= len {
-                        len - 1
-                    } else {
-                        stop_index
-                    };
+                    let start_index = normalise_lrange_indices(len, start_index);
+                    let stop_index = normalise_lrange_indices(len, stop_index);
                     if start_index >= len || start_index > stop_index {
                         Ok(format_array(Vec::new()))
                     } else {
@@ -290,4 +287,18 @@ fn format_array(v: Vec<BulkString>) -> String {
         s.push_str(&el.0);
     }
     s
+}
+
+fn normalise_lrange_indices(len: usize, index: isize) -> usize {
+    if index < 0 {
+        if index.abs() as usize > len {
+            return 0;
+        }
+        len - index as usize
+    } else {
+        if index as usize > len {
+            return len - 1;
+        }
+        index as usize
+    }
 }
