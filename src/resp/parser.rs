@@ -44,15 +44,16 @@ impl RespParser {
     }
 
     fn integer(&mut self) -> Result<i32, RespError> {
-        let mut num = String::from(self.current_char.unwrap());
-        self.advance();
-        while let Some(char) = self.current_char
-            && char.is_numeric()
-        {
-            num.push(char);
-            self.advance();
+        let mut num = String::new();
+        while let Some(char) = self.current_char {
+            if char.is_numeric() {
+                num.push(char);
+                self.advance();
+            } else {
+                return num.parse().map_err(|e| RespError::InvalidSyntax);
+            }
         }
-        num.parse().map_err(|e| RespError::InvalidSyntax)
+        Err(RespError::IncompleteTcpStream)
     }
 
     fn bulk_string(&mut self, len: i32) -> Result<String, RespError> {
@@ -60,23 +61,32 @@ impl RespParser {
         for _ in 0..len {
             match self.current_char {
                 Some(char) => s.push(char),
-                None => Err(RespError::InvalidSyntax)?,
+                None => Err(RespError::IncompleteTcpStream)?,
             }
             self.advance();
         }
         Ok(s.to_ascii_lowercase())
     }
-    pub fn create_tree(&mut self) -> Result<Vec<RespNode>, RespError> {
+    pub fn create_tree(&mut self) -> (usize, Vec<RespNode>) {
         let mut v = Vec::new();
+        let mut bytes_used = 0;
         if self.pos >= self.len {
-            return Ok(v);
+            return (bytes_used, v);
         }
         self.current_char = Some(self.text[self.pos]);
         while self.pos < self.len {
-            let node = self.get_next_node()?;
-            v.push(node);
+            let node = self.get_next_node();
+            match node {
+                Ok(n) => {
+                    v.push(n);
+                    bytes_used = self.pos * 4;
+                }
+                Err(e) => {
+                    println!("incomplete tcp stream");
+                }
+            }
         }
-        Ok(v)
+        (bytes_used, v)
     }
 
     fn crlf(&mut self) -> Result<(), RespError> {
@@ -87,7 +97,7 @@ impl RespParser {
             {
                 self.advance();
             } else {
-                Err(RespError::InvalidSyntax)?
+                Err(RespError::IncompleteTcpStream)?
             }
         }
         Ok(())
@@ -103,9 +113,6 @@ impl RespParser {
             for _ in 0..l {
                 children.push(self.get_next_node()?);
                 self.crlf()?;
-            }
-            if children.len() as i32 != l {
-                Err(RespError::InvalidSyntax)?
             }
             Ok(RespNode::Array(children))
         } else if char == '$' {

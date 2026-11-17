@@ -13,7 +13,10 @@ use chrono::{DateTime, Utc};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpSocket},
-    sync::mpsc::{self, Receiver, Sender},
+    sync::{
+        mpsc::{self, Receiver, Sender},
+        oneshot,
+    },
 };
 
 use crate::resp::{
@@ -24,13 +27,28 @@ mod resp;
 
 #[derive(Debug, Clone)]
 struct RespServer {
-    storage: Arc<Mutex<HashMap<String, StorageType>>>,
+    storage: Arc<Mutex<HashMap<String, Storage>>>,
+}
+
+#[derive(Debug)]
+struct Storage {
+    content: StorageType,
+    queue: VecDeque<tokio::sync::oneshot::Sender<StorageType>>,
+}
+
+impl Storage {
+    fn new(content: StorageType) -> Self {
+        Self {
+            content,
+            queue: VecDeque::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 enum StorageType {
     String(String),
-    List(VecDeque<String>),
+    List(VecDeque<StorageType>),
 }
 
 impl From<String> for StorageType {
@@ -51,6 +69,20 @@ impl RespServer {
     fn new() -> Self {
         Self {
             storage: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    fn handle_pop_queue(
+        &self,
+        queue: &mut VecDeque<tokio::sync::oneshot::Sender<StorageType>>,
+        value: String,
+    ) {
+        for _ in 0..queue.len() {
+            queue
+                .pop_front()
+                .unwrap()
+                .send(value.clone().into())
+                .unwrap();
         }
     }
 
@@ -86,11 +118,19 @@ impl RespServer {
                         .unwrap();
                     }
                 }
-                self.storage.lock().unwrap().insert(key, value.into());
+                self.storage
+                    .lock()
+                    .unwrap()
+                    .insert(key, Storage::new(value.into()));
                 Ok(format_simple_string(String::from("OK")))
             } else if fn_name == "get" {
                 let key = get_bulk_string_arg(v.next())?;
-                let value = self.storage.lock().unwrap().get(&key).cloned();
+                let value = self
+                    .storage
+                    .lock()
+                    .unwrap()
+                    .get(&key)
+                    .map(|storage| storage.content.clone());
                 if let Some(v) = value {
                     Ok(format_bulk_string(v.into()).0)
                 } else {
@@ -99,18 +139,21 @@ impl RespServer {
             } else if fn_name == "rpush" || fn_name == "lpush" {
                 let key = get_bulk_string_arg(v.next())?;
                 let mut map = self.storage.lock().unwrap();
-                let list = map.entry(key).or_insert(StorageType::List(VecDeque::new()));
-                if let StorageType::List(l) = list {
+                let storage = map
+                    .entry(key)
+                    .or_insert(Storage::new(StorageType::List(VecDeque::new())));
+                if let StorageType::List(l) = &mut storage.content {
                     for val in v {
                         if let RespNode::BulkString(s) = val {
                             if fn_name == "rpush" {
-                                l.push_back(s);
+                                self.handle_pop_queue(&mut storage.queue, s.clone());
+                                l.push_back(s.into());
                             } else {
-                                l.push_front(s);
+                                self.handle_pop_queue(&mut storage.queue, s.clone());
+                                l.push_front(s.into());
                             }
                         }
                     }
-
                     let new_len = l.len();
                     return Ok(format_integer_string(new_len as isize));
                 }
@@ -120,8 +163,10 @@ impl RespServer {
                 let start_index: isize = get_bulk_string_arg(v.next())?.parse().unwrap();
                 let stop_index: isize = get_bulk_string_arg(v.next())?.parse().unwrap();
                 let lock = self.storage.lock().unwrap();
-                let list = lock.get(&list_name);
-                if let Some(StorageType::List(v)) = list {
+                let storage = lock.get(&list_name);
+                if let Some(storage) = storage
+                    && let StorageType::List(v) = &storage.content
+                {
                     let len = v.len();
                     let start_index = normalise_lrange_indices(len, start_index);
                     let stop_index = normalise_lrange_indices(len, stop_index);
@@ -130,7 +175,7 @@ impl RespServer {
                     } else {
                         let mut bs = Vec::new();
                         for s in v.range(start_index..=stop_index) {
-                            bs.push(format_bulk_string(s.clone()));
+                            bs.push(format_bulk_string((*s).clone().into()));
                         }
                         Ok(format_array(bs))
                     }
@@ -140,8 +185,10 @@ impl RespServer {
             } else if fn_name == "llen" {
                 let list_name = get_bulk_string_arg(v.next())?;
                 let map = self.storage.lock().unwrap();
-                let list = map.get(&list_name);
-                if let Some(StorageType::List(l)) = list {
+                let storage = map.get(&list_name);
+                if let Some(storage) = storage
+                    && let StorageType::List(l) = &storage.content
+                {
                     return Ok(format_integer_string(l.len().cast_signed()));
                 }
                 Ok(format_integer_string(0))
@@ -151,15 +198,17 @@ impl RespServer {
                     .map(|p| p.parse().unwrap())
                     .unwrap_or(1);
                 let mut map = self.storage.lock().unwrap();
-                let list = map.get_mut(&list_name);
-                if let Some(StorageType::List(l)) = list {
+                let storage = map.get_mut(&list_name);
+                if let Some(storage) = storage
+                    && let StorageType::List(l) = &mut storage.content
+                {
                     let pop_num = if pop_num >= l.len() { l.len() } else { pop_num };
                     let mut items = Vec::new();
                     if pop_num == 0 {
                         return Ok(format_null_string());
                     }
                     for _ in 0..pop_num {
-                        items.push(format_bulk_string(l.pop_front().unwrap()));
+                        items.push(format_bulk_string(l.pop_front().unwrap().into()));
                     }
                     if pop_num == 1 {
                         return Ok(items.into_iter().next().unwrap().0);
@@ -167,12 +216,57 @@ impl RespServer {
                     return Ok(format_array(items));
                 }
                 Ok(format_null_string())
+            } else if fn_name == "blpop" {
+                let list_name = get_bulk_string_arg(v.next())?;
+                let timeout = get_bulk_string_arg(v.next())?;
+
+                let front_pop = self.pop_front(&list_name);
+                match front_pop {
+                    Some(Some(el)) => Ok(format_array(vec![
+                        format_bulk_string(list_name),
+                        format_bulk_string(el.into()),
+                    ])),
+                    Some(None) => {
+                        let (tx, rx) = oneshot::channel();
+                        self.push_queue(&list_name, tx);
+                        let value = rx.await.unwrap();
+                        Ok(format_array(vec![
+                            format_bulk_string(list_name),
+                            format_bulk_string(value.into()),
+                        ]))
+                    }
+                    None => Ok(format_array(Vec::new())),
+                }
             } else {
                 panic!("unsupported fn name")
             }
         } else {
             Err(RespError::InvalidSyntax)
         }
+    }
+    fn pop_front(&mut self, list: &str) -> Option<Option<StorageType>> {
+        let mut map = self.storage.lock().unwrap();
+        let storage = map.get_mut(list);
+        if let Some(storage) = storage
+            && let StorageType::List(l) = &mut storage.content
+        {
+            return Some(l.pop_front());
+        }
+
+        None
+    }
+    fn push_queue(
+        &mut self,
+        list: &str,
+        sender: oneshot::Sender<StorageType>,
+    ) -> Option<StorageType> {
+        let mut map = self.storage.lock().unwrap();
+        let storage = map.get_mut(list);
+        if let Some(storage) = storage {
+            storage.queue.push_back(sender);
+        }
+
+        None
     }
 }
 
@@ -210,8 +304,9 @@ async fn main() {
             Ok((mut stream, _)) => {
                 let mut cloned_server = server.clone();
                 let tx_clone = tx.clone();
+
                 tokio::spawn(async move {
-                    let mut buf = [0; 128];
+                    let mut buf = [0; 1024];
                     while let Ok(bytes) = stream.read(&mut buf).await
                         && bytes != 0
                     {
@@ -219,31 +314,35 @@ async fn main() {
                             .into_owned()
                             .to_lowercase();
                         let mut parser = RespParser::new(s.chars().collect());
-                        let tree = parser.create_tree();
-
-                        match tree {
-                            Ok(nodes) => {
-                                for node in nodes.into_iter() {
-                                    match cloned_server.visit(node, tx_clone.clone()).await {
-                                        Ok(s) => {
-                                            stream.write_all(s.as_bytes()).await.unwrap();
+                        let (bytes_used, tree) = parser.create_tree();
+                        if bytes_used >= buf.len() {
+                            buf.fill(0);
+                        } else {
+                            let remaining = buf.len() - bytes_used;
+                            buf.copy_within(bytes_used.., 0);
+                            for i in buf[remaining..].iter_mut() {
+                                *i = 0;
+                            }
+                        }
+                        for node in tree.into_iter() {
+                            match cloned_server.visit(node, tx_clone.clone()).await {
+                                Ok(s) => {
+                                    stream.write_all(s.as_bytes()).await.unwrap();
+                                }
+                                Err(e) => {
+                                    let error = match e {
+                                        RespError::Empty => error_string("no arguments"),
+                                        RespError::IncorrectParams => {
+                                            error_string("invalid params")
                                         }
-                                        Err(e) => {
-                                            let error = match e {
-                                                RespError::Empty => error_string("no arguments"),
-                                                RespError::IncorrectParams => {
-                                                    error_string("invalid params")
-                                                }
-                                                RespError::InvalidSyntax => {
-                                                    error_string("invalid syntax")
-                                                }
-                                            };
-                                            stream.write_all(error.as_bytes()).await.unwrap()
+                                        RespError::InvalidSyntax => error_string("invalid syntax"),
+                                        RespError::IncompleteTcpStream => {
+                                            error_string("incomplete tcp stream")
                                         }
-                                    }
+                                    };
+                                    stream.write_all(error.as_bytes()).await.unwrap()
                                 }
                             }
-                            Err(e) => {}
                         }
                     }
                 });
