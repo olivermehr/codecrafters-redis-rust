@@ -378,7 +378,7 @@ fn format_null_string() -> String {
 }
 
 fn format_null_array() -> String {
-    String::from("*-1\\r\n")
+    String::from("*-1\r\n")
 }
 
 fn error_string(error: &str) -> String {
