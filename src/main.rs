@@ -232,27 +232,37 @@ impl RespServer {
                             .queue
                             .get_or_insert(tx);
 
-                        tokio::select! {
-                            _ = tokio::time::sleep(Duration::from_millis(timeout as u64)) => {
-                                        self.storage
-                            .lock()
-                            .unwrap()
-                            .get_mut(&list_name)
-                            .unwrap()
-                            .queue = None;
-                        Ok(format_null_array())
+                        if timeout == 0.0 {
+                            let value = rx.await.unwrap();
+                            Ok(format_array(vec![
+                                format_bulk_string(list_name),
+                                format_bulk_string(value.into()),
+                            ]))
+                        } else if timeout > 0.0 {
+                            tokio::select! {
+                                _ = tokio::time::sleep(Duration::from_millis(timeout as u64)) => {
+                                            self.storage
+                                .lock()
+                                .unwrap()
+                                .get_mut(&list_name)
+                                .unwrap()
+                                .queue = None;
+                            Ok(format_null_array())
 
 
+                                }
+                                 msg = rx => {
+                                    let value = msg.unwrap();
+                                    Ok(format_array(vec![
+                                format_bulk_string(list_name),
+                                format_bulk_string(value.into()),
+                            ]))
+
+
+                                }
                             }
-                             msg = rx => {
-                                let value = msg.unwrap();
-                                Ok(format_array(vec![
-                            format_bulk_string(list_name),
-                            format_bulk_string(value.into()),
-                        ]))
-
-
-                            }
+                        } else {
+                            panic!("negative timeout")
                         }
                     }
                 }
