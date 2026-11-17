@@ -214,7 +214,7 @@ impl RespServer {
                 Ok(format_null_string())
             } else if fn_name == "blpop" {
                 let list_name = get_bulk_string_arg(v.next())?;
-                let timeout = get_bulk_string_arg(v.next())?.parse::<u64>().unwrap() * 1000;
+                let timeout = get_bulk_string_arg(v.next())?.parse::<f32>().unwrap() * 1000.0;
 
                 let front_pop = self.blpop_front(&list_name);
                 match front_pop {
