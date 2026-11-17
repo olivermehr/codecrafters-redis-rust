@@ -214,7 +214,7 @@ impl RespServer {
                 Ok(format_null_string())
             } else if fn_name == "blpop" {
                 let list_name = get_bulk_string_arg(v.next())?;
-                let timeout = get_bulk_string_arg(v.next())?;
+                let timeout: usize = get_bulk_string_arg(v.next())?.parse().unwrap();
 
                 let front_pop = self.blpop_front(&list_name);
                 match front_pop {
@@ -231,11 +231,29 @@ impl RespServer {
                             .unwrap()
                             .queue
                             .get_or_insert(tx);
-                        let value = rx.await.unwrap();
-                        Ok(format_array(vec![
+
+                        tokio::select! {
+                            _ = tokio::time::sleep(Duration::from_secs(timeout as u64)) => {
+                                        self.storage
+                            .lock()
+                            .unwrap()
+                            .get_mut(&list_name)
+                            .unwrap()
+                            .queue = None;
+                        Ok(format_null_array())
+
+
+                            }
+                             msg = rx => {
+                                let value = msg.unwrap();
+                                Ok(format_array(vec![
                             format_bulk_string(list_name),
                             format_bulk_string(value.into()),
                         ]))
+
+
+                            }
+                        }
                     }
                 }
             } else {
@@ -357,6 +375,10 @@ fn format_bulk_string(mut s: String) -> BulkString {
 }
 fn format_null_string() -> String {
     String::from("$-1\r\n")
+}
+
+fn format_null_array() -> String {
+    String::from("*-1\\r\n")
 }
 
 fn error_string(error: &str) -> String {
