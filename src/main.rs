@@ -220,13 +220,13 @@ impl RespServer {
                 let list_name = get_bulk_string_arg(v.next())?;
                 let timeout = get_bulk_string_arg(v.next())?;
 
-                let front_pop = self.pop_front(&list_name);
+                let front_pop = self.blpop_front(&list_name);
                 match front_pop {
-                    Some(Some(el)) => Ok(format_array(vec![
+                    Some(el) => Ok(format_array(vec![
                         format_bulk_string(list_name),
                         format_bulk_string(el.into()),
                     ])),
-                    Some(None) => {
+                    None => {
                         let (tx, rx) = oneshot::channel();
                         self.push_queue(&list_name, tx);
                         let value = rx.await.unwrap();
@@ -235,7 +235,6 @@ impl RespServer {
                             format_bulk_string(value.into()),
                         ]))
                     }
-                    None => Ok(format_array(Vec::new())),
                 }
             } else {
                 panic!("unsupported fn name")
@@ -244,15 +243,15 @@ impl RespServer {
             Err(RespError::InvalidSyntax)
         }
     }
-    fn pop_front(&mut self, list: &str) -> Option<Option<StorageType>> {
+    fn blpop_front(&mut self, list: &str) -> Option<StorageType> {
         let mut map = self.storage.lock().unwrap();
-        let storage = map.get_mut(list);
-        if let Some(storage) = storage
-            && let StorageType::List(l) = &mut storage.content
-        {
-            return Some(l.pop_front());
-        }
+        let storage = map
+            .entry(list.to_string())
+            .or_insert(Storage::new(StorageType::List(VecDeque::new())));
 
+        if let StorageType::List(l) = &mut storage.content {
+            return l.pop_front();
+        }
         None
     }
     fn push_queue(
