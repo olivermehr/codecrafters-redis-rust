@@ -467,7 +467,7 @@ fn format_null_array() -> String {
 }
 
 fn format_error_string(error: &str) -> String {
-    format!("-{error}\r\n")
+    format!("-ERR {error}\r\n")
 }
 
 fn format_integer_string(n: isize) -> String {
