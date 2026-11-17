@@ -293,6 +293,10 @@ impl RespServer {
             } else if fn_name == "xadd" {
                 let stream_key = get_bulk_string_arg(v.next())?;
                 let id = get_bulk_string_arg(v.next())?;
+                match self.validate_stream_id(&stream_key, &id) {
+                    Ok(_) => {}
+                    Err(s) => return Ok(format_error_string(&s)),
+                }
                 let mut kp_vec = Vec::new();
                 while let Ok(key) = get_bulk_string_arg(v.next()) {
                     let value = get_bulk_string_arg(v.next())?;
@@ -326,6 +330,32 @@ impl RespServer {
             return l.pop_front();
         }
         None
+    }
+    fn validate_stream_id(&self, stream_key: &str, id: &str) -> Result<(), String> {
+        if id == "0-0" {
+            Err(String::from(
+                "The ID specified in XADD must be greater than 0-0",
+            ))?
+        }
+        let lock = self.storage.lock().unwrap();
+        if let Some(ss) = lock.get(stream_key)
+            && let StorageType::Stream(v) = &ss.content
+            && let Some(entry) = v.last()
+        {
+            let (new_milli, new_seq) = id.split_once('-').unwrap();
+            let (last_milli, last_seq) = entry.id.split_once('-').unwrap();
+            let new_milli: usize = new_milli.parse().unwrap();
+            let last_milli: usize = last_milli.parse().unwrap();
+            let new_seq: usize = new_seq.parse().unwrap();
+            let last_seq: usize = last_seq.parse().unwrap();
+
+            if new_milli < last_milli || (new_milli == last_milli && new_seq <= last_seq) {
+                Err(String::from(
+                    "The ID specified in XADD is equal or smaller than the target stream top item",
+                ))?
+            }
+        }
+        Ok(())
     }
 }
 
@@ -390,13 +420,15 @@ async fn main() {
                                 }
                                 Err(e) => {
                                     let error = match e {
-                                        RespError::Empty => error_string("no arguments"),
+                                        RespError::Empty => format_error_string("no arguments"),
                                         RespError::IncorrectParams => {
-                                            error_string("invalid params")
+                                            format_error_string("invalid params")
                                         }
-                                        RespError::InvalidSyntax => error_string("invalid syntax"),
+                                        RespError::InvalidSyntax => {
+                                            format_error_string("invalid syntax")
+                                        }
                                         RespError::IncompleteTcpStream => {
-                                            error_string("incomplete tcp stream")
+                                            format_error_string("incomplete tcp stream")
                                         }
                                     };
                                     stream.write_all(error.as_bytes()).await.unwrap()
@@ -434,7 +466,7 @@ fn format_null_array() -> String {
     String::from("*-1\r\n")
 }
 
-fn error_string(error: &str) -> String {
+fn format_error_string(error: &str) -> String {
     format!("-{error}\r\n")
 }
 
