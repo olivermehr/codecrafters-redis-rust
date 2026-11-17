@@ -33,14 +33,14 @@ struct RespServer {
 #[derive(Debug)]
 struct Storage {
     content: StorageType,
-    queue: VecDeque<tokio::sync::oneshot::Sender<StorageType>>,
+    queue: Option<tokio::sync::oneshot::Sender<StorageType>>,
 }
 
 impl Storage {
     fn new(content: StorageType) -> Self {
         Self {
             content,
-            queue: VecDeque::new(),
+            queue: None,
         }
     }
 }
@@ -72,18 +72,12 @@ impl RespServer {
         }
     }
 
-    fn handle_pop_queue(
+    fn handle_bl_pop(
         &self,
-        queue: &mut VecDeque<tokio::sync::oneshot::Sender<StorageType>>,
+        queue: &mut Option<tokio::sync::oneshot::Sender<StorageType>>,
         value: String,
     ) {
-        for _ in 0..queue.len() {
-            queue
-                .pop_front()
-                .unwrap()
-                .send(value.clone().into())
-                .unwrap();
-        }
+        queue.take().unwrap().send(value.clone().into()).unwrap();
     }
 
     async fn visit(&mut self, node: RespNode, tx: Sender<Expiry>) -> Result<String, RespError> {
@@ -146,10 +140,10 @@ impl RespServer {
                     for val in v {
                         if let RespNode::BulkString(s) = val {
                             if fn_name == "rpush" {
-                                self.handle_pop_queue(&mut storage.queue, s.clone());
+                                self.handle_bl_pop(&mut storage.queue, s.clone());
                                 l.push_back(s.into());
                             } else {
-                                self.handle_pop_queue(&mut storage.queue, s.clone());
+                                self.handle_bl_pop(&mut storage.queue, s.clone());
                                 l.push_front(s.into());
                             }
                         }
@@ -228,7 +222,13 @@ impl RespServer {
                     ])),
                     None => {
                         let (tx, rx) = oneshot::channel();
-                        self.push_queue(&list_name, tx);
+                        self.storage
+                            .lock()
+                            .unwrap()
+                            .get_mut(&list_name)
+                            .unwrap()
+                            .queue
+                            .get_or_insert(tx);
                         let value = rx.await.unwrap();
                         Ok(format_array(vec![
                             format_bulk_string(list_name),
@@ -252,19 +252,6 @@ impl RespServer {
         if let StorageType::List(l) = &mut storage.content {
             return l.pop_front();
         }
-        None
-    }
-    fn push_queue(
-        &mut self,
-        list: &str,
-        sender: oneshot::Sender<StorageType>,
-    ) -> Option<StorageType> {
-        let mut map = self.storage.lock().unwrap();
-        let storage = map.get_mut(list);
-        if let Some(storage) = storage {
-            storage.queue.push_back(sender);
-        }
-
         None
     }
 }
