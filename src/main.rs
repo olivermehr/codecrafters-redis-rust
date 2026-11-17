@@ -4,6 +4,7 @@ use core::error;
 use std::{
     borrow::Cow,
     collections::{HashMap, VecDeque},
+    fmt::Display,
     ops::Add,
     sync::{Arc, Mutex, MutexGuard},
     time::Duration,
@@ -49,6 +50,15 @@ impl Storage {
 enum StorageType {
     String(String),
     List(VecDeque<StorageType>),
+}
+
+impl Display for StorageType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::List(_) => write!(f, "list"),
+            Self::String(_) => write!(f, "string"),
+        }
+    }
 }
 
 impl From<String> for StorageType {
@@ -265,6 +275,12 @@ impl RespServer {
                             panic!("negative timeout")
                         }
                     }
+                }
+            } else if fn_name == "type" {
+                let key = get_bulk_string_arg(v.next())?;
+                match self.storage.lock().unwrap().get(&key) {
+                    Some(v) => Ok(format_simple_string(v.content.to_string())),
+                    None => Ok(format_simple_string(String::from("none"))),
                 }
             } else {
                 panic!("unsupported fn name")
