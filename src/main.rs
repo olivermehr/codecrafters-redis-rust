@@ -47,9 +47,16 @@ impl Storage {
 }
 
 #[derive(Debug, Clone)]
+struct StreamEntries {
+    id: String,
+    data: Vec<(String, String)>,
+}
+
+#[derive(Debug, Clone)]
 enum StorageType {
     String(String),
     List(VecDeque<StorageType>),
+    Stream(Vec<StreamEntries>),
 }
 
 impl Display for StorageType {
@@ -57,6 +64,7 @@ impl Display for StorageType {
         match self {
             Self::List(_) => write!(f, "list"),
             Self::String(_) => write!(f, "string"),
+            Self::Stream(_) => write!(f, "stream"),
         }
     }
 }
@@ -109,7 +117,7 @@ impl RespServer {
                         let num = get_bulk_string_arg(v.next())?;
                         tx.send(Expiry {
                             key: key.clone(),
-                            millis: num.parse::<u64>().map_err(|e| RespError::IncorrectParams)?
+                            millis: num.parse::<u64>().map_err(|_| RespError::IncorrectParams)?
                                 * 1000,
                         })
                         .await
@@ -118,7 +126,7 @@ impl RespServer {
                         let num = get_bulk_string_arg(v.next())?;
                         tx.send(Expiry {
                             key: key.clone(),
-                            millis: num.parse().map_err(|e| RespError::IncorrectParams)?,
+                            millis: num.parse().map_err(|_| RespError::IncorrectParams)?,
                         })
                         .await
                         .unwrap();
@@ -282,6 +290,25 @@ impl RespServer {
                     Some(v) => Ok(format_simple_string(v.content.to_string())),
                     None => Ok(format_simple_string(String::from("none"))),
                 }
+            } else if fn_name == "xadd" {
+                let stream_key = get_bulk_string_arg(v.next())?;
+                let id = get_bulk_string_arg(v.next())?;
+                let mut kp_vec = Vec::new();
+                while let Ok(key) = get_bulk_string_arg(v.next()) {
+                    let value = get_bulk_string_arg(v.next())?;
+                    kp_vec.push((key, value));
+                }
+                let mut lock = self.storage.lock().unwrap();
+                let stream = lock
+                    .entry(stream_key)
+                    .or_insert(Storage::new(StorageType::Stream(Vec::new())));
+                if let StorageType::Stream(v) = &mut stream.content {
+                    v.push(StreamEntries {
+                        id: id.clone(),
+                        data: kp_vec,
+                    });
+                }
+                Ok(format_bulk_string(id).0)
             } else {
                 panic!("unsupported fn name")
             }
