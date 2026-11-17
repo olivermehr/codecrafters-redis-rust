@@ -77,7 +77,9 @@ impl RespServer {
         queue: &mut Option<tokio::sync::oneshot::Sender<StorageType>>,
         value: String,
     ) {
-        queue.take().unwrap().send(value.clone().into()).unwrap();
+        if let Some(tx) = queue.take() {
+            tx.send(value.into()).unwrap();
+        }
     }
 
     async fn visit(&mut self, node: RespNode, tx: Sender<Expiry>) -> Result<String, RespError> {
