@@ -214,7 +214,7 @@ impl RespServer {
                 Ok(format_null_string())
             } else if fn_name == "blpop" {
                 let list_name = get_bulk_string_arg(v.next())?;
-                let timeout: usize = get_bulk_string_arg(v.next())?.parse().unwrap();
+                let timeout = get_bulk_string_arg(v.next())?.parse::<u64>().unwrap() * 1000;
 
                 let front_pop = self.blpop_front(&list_name);
                 match front_pop {
@@ -233,7 +233,7 @@ impl RespServer {
                             .get_or_insert(tx);
 
                         tokio::select! {
-                            _ = tokio::time::sleep(Duration::from_secs(timeout as u64)) => {
+                            _ = tokio::time::sleep(Duration::from_millis(timeout as u64)) => {
                                         self.storage
                             .lock()
                             .unwrap()
