@@ -375,13 +375,16 @@ impl RespServer {
                 if let Some(storage) = storage
                     && let StorageType::Stream(v) = &storage.content
                     && !v.is_empty()
-                    && let Ok(index) =
-                        v.binary_search_by_key(&start_index.as_str(), |e| e.id.as_str())
-                    && index + 1 < v.len()
                 {
-                    return Ok(format_stream_entries(&v[index + 1..]));
+                    if start_index == "0-0" {
+                        return Ok(format_stream_entries(&v[0..]));
+                    } else if let Ok(index) =
+                        v.binary_search_by_key(&start_index.as_str(), |e| e.id.as_str())
+                        && index + 1 < v.len()
+                    {
+                        return Ok(format_stream_entries(&v[index + 1..]));
+                    }
                 }
-
                 Ok(format_array(EMPTY_ARRAY))
             } else {
                 panic!("unsupported fn name")
