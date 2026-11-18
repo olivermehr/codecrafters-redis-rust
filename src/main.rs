@@ -366,6 +366,7 @@ impl RespServer {
                     "The ID specified in XADD is equal or smaller than the target stream top item",
                 ))?
             }
+            println!("{},{}",new_milli,new_seq);
             return Ok(format!("{}-{}", new_milli, new_seq));
         }
         Ok(id.to_string())
