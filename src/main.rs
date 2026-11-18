@@ -375,8 +375,8 @@ impl RespServer {
                     param_vec.push(p)
                 }
                 println!("{:?}", param_vec);
+                assert!(param_vec.len() % 2 == 0);
                 let param_mid = param_vec.len() / 2;
-                assert!(param_mid % 2 == 0);
                 let lock = self.storage.lock().unwrap();
                 let mut stream_vec = Vec::new();
                 for i in 0..param_mid {
