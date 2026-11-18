@@ -293,7 +293,7 @@ impl RespServer {
             } else if fn_name == "xadd" {
                 let stream_key = get_bulk_string_arg(v.next())?;
                 let mut id = get_bulk_string_arg(v.next())?;
-                match self.validate_stream_id(&stream_key, &id) {
+                match self.validate_stream_id(&stream_key, id) {
                     Ok(processed_id) => id = processed_id,
                     Err(s) => return Ok(format_error_string(&s)),
                 }
@@ -331,18 +331,18 @@ impl RespServer {
         }
         None
     }
-    fn validate_stream_id(&self, stream_key: &str, id: &str) -> Result<String, String> {
+    fn validate_stream_id(&self, stream_key: &str, id: String) -> Result<String, String> {
         if id == "0-0" {
             Err(String::from(
                 "The ID specified in XADD must be greater than 0-0",
             ))?
         }
+        let (new_milli, new_seq) = id.split_once('-').unwrap();
         let lock = self.storage.lock().unwrap();
         if let Some(ss) = lock.get(stream_key)
             && let StorageType::Stream(v) = &ss.content
             && let Some(entry) = v.last()
         {
-            let (new_milli, new_seq) = id.split_once('-').unwrap();
             let (last_milli, last_seq) = entry.id.split_once('-').unwrap();
             let last_milli: usize = last_milli.parse().unwrap();
             let last_seq: usize = last_seq.parse().unwrap();
@@ -366,10 +366,16 @@ impl RespServer {
                     "The ID specified in XADD is equal or smaller than the target stream top item",
                 ))?
             }
-            println!("{},{}",new_milli,new_seq);
+            println!("{},{}", new_milli, new_seq);
             return Ok(format!("{}-{}", new_milli, new_seq));
         }
-        Ok(id.to_string())
+        let new_seq: usize = if new_seq == "*" {
+            1
+        } else {
+            new_seq.parse().unwrap()
+        };
+
+        Ok(format!("{}-{}", new_milli, new_seq))
     }
 }
 
