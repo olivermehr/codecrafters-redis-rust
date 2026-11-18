@@ -374,6 +374,7 @@ impl RespServer {
                 while let Ok(p) = get_bulk_string_arg(v.next()) {
                     param_vec.push(p)
                 }
+                println!("{:?}", param_vec);
                 let param_mid = param_vec.len() / 2;
                 assert!(param_mid % 2 == 0);
                 let lock = self.storage.lock().unwrap();
