@@ -370,27 +370,39 @@ impl RespServer {
             } else if fn_name == "xread" {
                 // skip streams keyword
                 v.next();
-                let stream_key = get_bulk_string_arg(v.next())?;
-                let start_index = get_bulk_string_arg(v.next())?;
+                let mut param_vec = Vec::new();
+                while let Ok(p) = get_bulk_string_arg(v.next()) {
+                    param_vec.push(p)
+                }
+                let param_mid = param_vec.len() / 2;
+                assert!(param_mid % 2 == 0);
                 let lock = self.storage.lock().unwrap();
-                let storage = lock.get(&stream_key);
-                if let Some(storage) = storage
-                    && let StorageType::Stream(v) = &storage.content
-                    && !v.is_empty()
-                {
-                    if start_index == "0-0" {
-                        return Ok(format_array(&[format_array(&[
-                            format_bulk_string(stream_key),
-                            format_stream_entries(&v[0..]),
-                        ])]));
-                    } else if let Ok(index) =
-                        v.binary_search_by_key(&start_index.as_str(), |e| e.id.as_str())
-                        && index + 1 < v.len()
+                let mut stream_vec = Vec::new();
+                for i in 0..2 {
+                    let stream_key = &param_vec[i];
+                    let storage = lock.get(stream_key);
+                    if let Some(storage) = storage
+                        && let StorageType::Stream(v) = &storage.content
+                        && !v.is_empty()
                     {
-                        return Ok(format_stream_entries(&v[index + 1..]));
+                        let start_index = &param_vec[i + param_mid];
+                        if start_index == "0-0" {
+                            stream_vec.push(format_array(&[
+                                format_bulk_string(stream_key.clone()),
+                                format_stream_entries(&v[0..]),
+                            ]));
+                        } else if let Ok(index) =
+                            v.binary_search_by_key(&start_index.as_str(), |e| e.id.as_str())
+                            && index + 1 < v.len()
+                        {
+                            stream_vec.push(format_array(&[
+                                format_bulk_string(stream_key.clone()),
+                                format_stream_entries(&v[index + 1..]),
+                            ]));
+                        }
                     }
                 }
-                Ok(format_array(EMPTY_ARRAY))
+                Ok(format_array(&stream_vec))
             } else {
                 panic!("unsupported fn name")
             }
