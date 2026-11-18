@@ -643,7 +643,7 @@ fn normalise_lrange_indices(len: usize, index: isize) -> usize {
 fn format_stream_entries(iter: &[StreamEntries]) -> String {
     let mut result_strings = Vec::new();
     let mut entry_vec = Vec::new();
-    entry_vec.push(iter[0].id.clone());
+    entry_vec.push(format_bulk_string(iter[0].id.clone()));
     for e in iter {
         let mut kp_vec = Vec::new();
         for (key, value) in e.data.iter() {
