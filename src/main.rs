@@ -374,6 +374,7 @@ impl RespServer {
             println!("{},{}", new_milli, new_seq);
             return Ok(format!("{}-{}", new_milli, new_seq));
         }
+        let new_milli = Utc::now().timestamp_millis();
         let new_seq: usize = if new_seq == "*" {
             1
         } else {
