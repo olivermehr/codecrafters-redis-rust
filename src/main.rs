@@ -326,7 +326,9 @@ impl RespServer {
                 if let Some(storage) = storage
                     && let StorageType::Stream(v) = &storage.content
                 {
-                    let start_index = if start_index.contains('-') {
+                    let start_index = if start_index == "-" {
+                        v.first().unwrap().id.clone()
+                    } else if start_index.contains('-') {
                         start_index
                     } else {
                         start_index.push_str("-0");
