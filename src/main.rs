@@ -385,21 +385,16 @@ impl RespServer {
                         && let StorageType::Stream(v) = &storage.content
                         && !v.is_empty()
                     {
-                        let start_index = &param_vec[i + param_mid];
-                        if start_index == "0-0" {
-                            stream_vec.push(format_array(&[
-                                format_bulk_string(stream_key.clone()),
-                                format_stream_entries(&v[0..]),
-                            ]));
-                        } else if let Ok(index) =
-                            v.binary_search_by_key(&start_index.as_str(), |e| e.id.as_str())
-                            && index + 1 < v.len()
-                        {
-                            stream_vec.push(format_array(&[
-                                format_bulk_string(stream_key.clone()),
-                                format_stream_entries(&v[index + 1..]),
-                            ]));
-                        }
+                        let start_id: &String = &param_vec[i + param_mid];
+                        let index =
+                            match v.binary_search_by_key(&start_id.as_str(), |e| e.id.as_str()) {
+                                Ok(i) => i,
+                                Err(i) => i,
+                            };
+                        stream_vec.push(format_array(&[
+                            format_bulk_string(stream_key.clone()),
+                            format_stream_entries(&v[index..]),
+                        ]));
                     }
                 }
                 Ok(format_array(&stream_vec))
