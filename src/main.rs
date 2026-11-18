@@ -292,9 +292,9 @@ impl RespServer {
                 }
             } else if fn_name == "xadd" {
                 let stream_key = get_bulk_string_arg(v.next())?;
-                let id = get_bulk_string_arg(v.next())?;
+                let mut id = get_bulk_string_arg(v.next())?;
                 match self.validate_stream_id(&stream_key, &id) {
-                    Ok(_) => {}
+                    Ok(processed_id) => id = processed_id,
                     Err(s) => return Ok(format_error_string(&s)),
                 }
                 let mut kp_vec = Vec::new();
@@ -331,7 +331,7 @@ impl RespServer {
         }
         None
     }
-    fn validate_stream_id(&self, stream_key: &str, id: &str) -> Result<(), String> {
+    fn validate_stream_id(&self, stream_key: &str, id: &str) -> Result<String, String> {
         if id == "0-0" {
             Err(String::from(
                 "The ID specified in XADD must be greater than 0-0",
@@ -344,10 +344,22 @@ impl RespServer {
         {
             let (new_milli, new_seq) = id.split_once('-').unwrap();
             let (last_milli, last_seq) = entry.id.split_once('-').unwrap();
-            let new_milli: usize = new_milli.parse().unwrap();
             let last_milli: usize = last_milli.parse().unwrap();
-            let new_seq: usize = new_seq.parse().unwrap();
             let last_seq: usize = last_seq.parse().unwrap();
+
+            let new_seq: usize = if new_seq == "*" {
+                let new_milli: usize = new_milli.parse().unwrap();
+                if new_milli == 0 {
+                    1
+                } else if new_milli == last_milli {
+                    last_seq + 1
+                } else {
+                    0
+                }
+            } else {
+                new_seq.parse().unwrap()
+            };
+            let new_milli: usize = new_milli.parse().unwrap();
 
             if new_milli < last_milli || (new_milli == last_milli && new_seq <= last_seq) {
                 Err(String::from(
@@ -355,7 +367,7 @@ impl RespServer {
                 ))?
             }
         }
-        Ok(())
+        Ok(id.to_string())
     }
 }
 
