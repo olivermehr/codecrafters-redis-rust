@@ -325,6 +325,7 @@ impl RespServer {
                 let storage = lock.get(&stream_key);
                 if let Some(storage) = storage
                     && let StorageType::Stream(v) = &storage.content
+                    && !v.is_empty()
                 {
                     let start_index = if start_index == "-" {
                         v.first().unwrap().id.clone()
@@ -334,7 +335,9 @@ impl RespServer {
                         start_index.push_str("-0");
                         start_index
                     };
-                    let stop_index = if stop_index.contains('-') {
+                    let stop_index = if stop_index == "+" {
+                        v.last().unwrap().id.clone()
+                    } else if stop_index.contains('-') {
                         stop_index
                     } else {
                         let milli_index = v
