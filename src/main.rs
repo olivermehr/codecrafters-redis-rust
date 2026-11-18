@@ -364,20 +364,24 @@ impl RespServer {
                     let stop_index = v
                         .binary_search_by_key(&stop_index.as_str(), |entry| entry.id.as_str())
                         .unwrap();
-                    let mut result_strings = Vec::new();
-                    for e in &v[start_index..=stop_index] {
-                        let mut entry_vec = Vec::new();
-                        entry_vec.push(format_bulk_string(e.id.to_string()));
-                        let mut kp_vec = Vec::new();
-                        for (key, value) in e.data.iter() {
-                            kp_vec.push(format_bulk_string(key.clone()));
-                            kp_vec.push(format_bulk_string(value.clone()));
-                        }
-                        entry_vec.push(format_array(&kp_vec));
-                        result_strings.push(format_array(&entry_vec));
-                    }
-                    return Ok(format_array(&result_strings));
+                    return Ok(format_stream_entries(&v[start_index..=stop_index]));
                 }
+                Ok(format_array(EMPTY_ARRAY))
+            } else if fn_name == "xread" {
+                let stream_key = get_bulk_string_arg(v.next())?;
+                let start_index = get_bulk_string_arg(v.next())?;
+                let lock = self.storage.lock().unwrap();
+                let storage = lock.get(&stream_key);
+                if let Some(storage) = storage
+                    && let StorageType::Stream(v) = &storage.content
+                    && !v.is_empty()
+                    && let Ok(index) =
+                        v.binary_search_by_key(&start_index.as_str(), |e| e.id.as_str())
+                    && index + 1 < v.len()
+                {
+                    return Ok(format_stream_entries(&v[index + 1..]));
+                }
+
                 Ok(format_array(EMPTY_ARRAY))
             } else {
                 panic!("unsupported fn name")
@@ -629,4 +633,20 @@ fn normalise_lrange_indices(len: usize, index: isize) -> usize {
         }
         index.unsigned_abs()
     }
+}
+
+fn format_stream_entries(iter: &[StreamEntries]) -> String {
+    let mut result_strings = Vec::new();
+    for e in iter {
+        let mut entry_vec = Vec::new();
+        entry_vec.push(format_bulk_string(e.id.to_string()));
+        let mut kp_vec = Vec::new();
+        for (key, value) in e.data.iter() {
+            kp_vec.push(format_bulk_string(key.clone()));
+            kp_vec.push(format_bulk_string(value.clone()));
+        }
+        entry_vec.push(format_array(&kp_vec));
+        result_strings.push(format_array(&entry_vec));
+    }
+    format_array(&result_strings)
 }
