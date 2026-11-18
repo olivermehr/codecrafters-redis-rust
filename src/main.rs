@@ -379,10 +379,10 @@ impl RespServer {
                     && !v.is_empty()
                 {
                     if start_index == "0-0" {
-                        return Ok(format_array(&[
+                        return Ok(format_array(&[format_array(&[
                             format_bulk_string(stream_key),
                             format_stream_entries(&v[0..]),
-                        ]));
+                        ])]));
                     } else if let Ok(index) =
                         v.binary_search_by_key(&start_index.as_str(), |e| e.id.as_str())
                         && index + 1 < v.len()
