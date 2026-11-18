@@ -347,8 +347,13 @@ impl RespServer {
             let last_milli: usize = last_milli.parse().unwrap();
             let last_seq: usize = last_seq.parse().unwrap();
 
+            let new_milli: usize = if new_seq == "*" {
+                Utc::now().timestamp_millis() as usize
+            } else {
+                new_milli.parse().unwrap()
+            };
+
             let new_seq: usize = if new_seq == "*" {
-                let new_milli: usize = new_milli.parse().unwrap();
                 if new_milli == 0 {
                     1
                 } else if new_milli == last_milli {
@@ -359,7 +364,6 @@ impl RespServer {
             } else {
                 new_seq.parse().unwrap()
             };
-            let new_milli: usize = new_milli.parse().unwrap();
 
             if new_milli < last_milli || (new_milli == last_milli && new_seq <= last_seq) {
                 Err(String::from(
