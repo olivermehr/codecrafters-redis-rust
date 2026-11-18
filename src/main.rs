@@ -2,9 +2,11 @@
 
 use core::error;
 use std::{
+    array,
     borrow::Cow,
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, VecDeque, btree_map::Entry},
     fmt::Display,
+    fs::read,
     ops::Add,
     sync::{Arc, Mutex, MutexGuard},
     time::Duration,
@@ -83,6 +85,8 @@ impl From<StorageType> for String {
     }
 }
 
+static EMPTY_ARRAY: &[String; 0] = &[];
+
 impl RespServer {
     fn new() -> Self {
         Self {
@@ -108,7 +112,7 @@ impl RespServer {
                 Ok(format_simple_string(String::from("PONG")))
             } else if fn_name == "echo" {
                 let value = get_bulk_string_arg(v.next())?;
-                Ok(format_bulk_string(value).0)
+                Ok(format_bulk_string(value))
             } else if fn_name == "set" {
                 let key = get_bulk_string_arg(v.next())?;
                 let value = get_bulk_string_arg(v.next())?;
@@ -146,7 +150,7 @@ impl RespServer {
                     .get(&key)
                     .map(|storage| storage.content.clone());
                 if let Some(v) = value {
-                    Ok(format_bulk_string(v.into()).0)
+                    Ok(format_bulk_string(v.into()))
                 } else {
                     Ok(format_null_string())
                 }
@@ -185,16 +189,16 @@ impl RespServer {
                     let start_index = normalise_lrange_indices(len, start_index);
                     let stop_index = normalise_lrange_indices(len, stop_index);
                     if start_index >= len || start_index > stop_index {
-                        Ok(format_array(Vec::new()))
+                        Ok(format_array(EMPTY_ARRAY))
                     } else {
                         let mut bs = Vec::new();
                         for s in v.range(start_index..=stop_index) {
                             bs.push(format_bulk_string((*s).clone().into()));
                         }
-                        Ok(format_array(bs))
+                        Ok(format_array(&bs))
                     }
                 } else {
-                    Ok(format_array(Vec::new()))
+                    Ok(format_array(EMPTY_ARRAY))
                 }
             } else if fn_name == "llen" {
                 let list_name = get_bulk_string_arg(v.next())?;
@@ -225,9 +229,9 @@ impl RespServer {
                         items.push(format_bulk_string(l.pop_front().unwrap().into()));
                     }
                     if pop_num == 1 {
-                        return Ok(items.into_iter().next().unwrap().0);
+                        return Ok(items.into_iter().next().unwrap());
                     }
-                    return Ok(format_array(items));
+                    return Ok(format_array(&items));
                 }
                 Ok(format_null_string())
             } else if fn_name == "blpop" {
@@ -236,7 +240,7 @@ impl RespServer {
 
                 let front_pop = self.blpop_front(&list_name);
                 match front_pop {
-                    Some(el) => Ok(format_array(vec![
+                    Some(el) => Ok(format_array(&[
                         format_bulk_string(list_name),
                         format_bulk_string(el.into()),
                     ])),
@@ -252,7 +256,7 @@ impl RespServer {
 
                         if timeout == 0.0 {
                             let value = rx.await.unwrap();
-                            Ok(format_array(vec![
+                            Ok(format_array(&[
                                 format_bulk_string(list_name),
                                 format_bulk_string(value.into()),
                             ]))
@@ -271,7 +275,7 @@ impl RespServer {
                                 }
                                  msg = rx => {
                                     let value = msg.unwrap();
-                                    Ok(format_array(vec![
+                                    Ok(format_array(&[
                                 format_bulk_string(list_name),
                                 format_bulk_string(value.into()),
                             ]))
@@ -312,7 +316,62 @@ impl RespServer {
                         data: kp_vec,
                     });
                 }
-                Ok(format_bulk_string(id).0)
+                Ok(format_bulk_string(id))
+            } else if fn_name == "xrange" {
+                let stream_key = get_bulk_string_arg(v.next())?;
+                let mut start_index = get_bulk_string_arg(v.next())?;
+                let mut stop_index = get_bulk_string_arg(v.next())?;
+                let lock = self.storage.lock().unwrap();
+                let storage = lock.get(&stream_key);
+                if let Some(storage) = storage
+                    && let StorageType::Stream(v) = &storage.content
+                {
+                    let start_index = if start_index.contains('-') {
+                        start_index
+                    } else {
+                        start_index.push_str("-0");
+                        start_index
+                    };
+                    let stop_index = if stop_index.contains('-') {
+                        stop_index
+                    } else {
+                        let milli_index = v
+                            .binary_search_by_key(&stop_index.as_str(), |entry| {
+                                entry.id.split_once('-').unwrap().0
+                            })
+                            .unwrap();
+                        let mut max_seq = 0;
+                        for i in &v[milli_index..] {
+                            let (curr_milli, seq) = i.id.split_once('-').unwrap();
+                            let seq = seq.parse().unwrap();
+                            if curr_milli == stop_index && seq >= max_seq {
+                                max_seq = seq;
+                            } else {
+                                break;
+                            }
+                        }
+                        stop_index.push_str(&format!("-{}", max_seq));
+                        stop_index
+                    };
+                    let start_index = v
+                        .binary_search_by_key(&start_index.as_str(), |entry| entry.id.as_str())
+                        .unwrap();
+                    let stop_index = v
+                        .binary_search_by_key(&stop_index.as_str(), |entry| entry.id.as_str())
+                        .unwrap();
+                    let mut result_strings = Vec::new();
+                    for e in &v[start_index..=stop_index] {
+                        let mut entry_vec = Vec::new();
+                        entry_vec.push(format_bulk_string(e.id.to_string()));
+                        for (key, value) in e.data.iter() {
+                            entry_vec.push(format_bulk_string(key.clone()));
+                            entry_vec.push(format_bulk_string(value.clone()));
+                        }
+                        result_strings.push(format_array(&entry_vec));
+                    }
+                    return Ok(format_array(&result_strings));
+                }
+                Ok(format_array(EMPTY_ARRAY))
             } else {
                 panic!("unsupported fn name")
             }
@@ -371,10 +430,8 @@ impl RespServer {
                     "The ID specified in XADD is equal or smaller than the target stream top item",
                 ))?
             }
-            println!("{},{}", new_milli, new_seq);
             return Ok(format!("{}-{}", new_milli, new_seq));
         }
-
 
         let new_milli = if new_milli == "*" {
             Utc::now().timestamp_millis() as usize
@@ -428,10 +485,11 @@ async fn main() {
 
                 tokio::spawn(async move {
                     let mut buf = [0; 1024];
-                    while let Ok(bytes) = stream.read(&mut buf).await
+                    let mut read_index = 0;
+                    while let Ok(bytes) = stream.read(&mut buf[read_index..]).await
                         && bytes != 0
                     {
-                        let s = String::from_utf8_lossy(&buf[..bytes])
+                        let s = String::from_utf8_lossy(&buf[..read_index + bytes])
                             .into_owned()
                             .to_lowercase();
                         let mut parser = RespParser::new(s.chars().collect());
@@ -439,10 +497,15 @@ async fn main() {
                         if bytes_used >= buf.len() {
                             buf.fill(0);
                         } else {
-                            let remaining = buf.len() - bytes_used;
-                            buf.copy_within(bytes_used.., 0);
-                            for i in buf[remaining..].iter_mut() {
-                                *i = 0;
+                            if bytes_used == 0 {
+                                read_index = bytes;
+                            } else {
+                                read_index = 0;
+                                buf.copy_within(bytes_used.., 0);
+                                let remaining = buf.len() - bytes_used;
+                                for i in buf[remaining..].iter_mut() {
+                                    *i = 0;
+                                }
                             }
                         }
                         for node in tree.into_iter() {
@@ -484,11 +547,11 @@ fn format_simple_string(mut s: String) -> String {
     s.push_str("\r\n");
     s
 }
-fn format_bulk_string(mut s: String) -> BulkString {
+fn format_bulk_string(mut s: String) -> String {
     let len = s.len();
     s.insert_str(0, &format!("${}\r\n", len));
     s.push_str("\r\n");
-    BulkString(s)
+    s
 }
 fn format_null_string() -> String {
     String::from("$-1\r\n")
@@ -535,14 +598,14 @@ fn get_integer_arg(node: Option<RespNode>) -> Result<isize, RespError> {
     }
 }
 
-fn format_array(v: Vec<BulkString>) -> String {
+fn format_array(v: &[String]) -> String {
     let len = v.len();
     let mut s = format!("*{len}\r\n");
     if len == 0 {
         return s;
     }
     for el in v {
-        s.push_str(&el.0);
+        s.push_str(&el);
     }
     s
 }

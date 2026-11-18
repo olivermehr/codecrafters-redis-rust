@@ -81,9 +81,7 @@ impl RespParser {
                     v.push(n);
                     bytes_used = self.pos * 4;
                 }
-                Err(e) => {
-                    println!("incomplete tcp stream");
-                }
+                Err(e) => {}
             }
         }
         (bytes_used, v)
@@ -104,7 +102,7 @@ impl RespParser {
     }
 
     fn get_next_node(&mut self) -> Result<RespNode, RespError> {
-        let char = self.current_char.unwrap();
+        let char = self.current_char.ok_or(RespError::IncompleteTcpStream)?;
         if char == '*' {
             self.advance();
             let l = self.integer()?;
@@ -126,7 +124,7 @@ impl RespParser {
             let int = self.integer()?;
             Ok(RespNode::Integer(int as isize))
         } else {
-            panic!("unsupported token")
+            panic!("unsupported token {:?}", self.current_char)
         }
     }
 }
