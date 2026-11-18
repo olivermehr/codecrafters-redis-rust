@@ -363,10 +363,12 @@ impl RespServer {
                     for e in &v[start_index..=stop_index] {
                         let mut entry_vec = Vec::new();
                         entry_vec.push(format_bulk_string(e.id.to_string()));
+                        let mut kp_vec = Vec::new();
                         for (key, value) in e.data.iter() {
-                            entry_vec.push(format_bulk_string(key.clone()));
-                            entry_vec.push(format_bulk_string(value.clone()));
+                            kp_vec.push(format_bulk_string(key.clone()));
+                            kp_vec.push(format_bulk_string(value.clone()));
                         }
+                        entry_vec.push(format_array(&kp_vec));
                         result_strings.push(format_array(&entry_vec));
                     }
                     return Ok(format_array(&result_strings));
@@ -605,7 +607,7 @@ fn format_array(v: &[String]) -> String {
         return s;
     }
     for el in v {
-        s.push_str(&el);
+        s.push_str(el);
     }
     s
 }
