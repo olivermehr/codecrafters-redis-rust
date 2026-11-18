@@ -337,8 +337,9 @@ impl RespServer {
                 "The ID specified in XADD must be greater than 0-0",
             ))?
         }
-        let (new_milli, new_seq) = id.split_once('-').unwrap();
+        let (new_milli, new_seq) = id.split_once('-').unwrap_or(("*", "*"));
         let lock = self.storage.lock().unwrap();
+
         if let Some(ss) = lock.get(stream_key)
             && let StorageType::Stream(v) = &ss.content
             && let Some(entry) = v.last()
