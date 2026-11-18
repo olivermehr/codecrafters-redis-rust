@@ -378,7 +378,7 @@ impl RespServer {
                 assert!(param_mid % 2 == 0);
                 let lock = self.storage.lock().unwrap();
                 let mut stream_vec = Vec::new();
-                for i in 0..2 {
+                for i in 0..param_mid {
                     let stream_key = &param_vec[i];
                     let storage = lock.get(stream_key);
                     if let Some(storage) = storage
