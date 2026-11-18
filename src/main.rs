@@ -368,6 +368,8 @@ impl RespServer {
                 }
                 Ok(format_array(EMPTY_ARRAY))
             } else if fn_name == "xread" {
+                // skip streams keyword
+                v.next();
                 let stream_key = get_bulk_string_arg(v.next())?;
                 let start_index = get_bulk_string_arg(v.next())?;
                 let lock = self.storage.lock().unwrap();
