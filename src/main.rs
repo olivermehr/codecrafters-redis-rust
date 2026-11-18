@@ -348,7 +348,7 @@ impl RespServer {
             let last_milli: usize = last_milli.parse().unwrap();
             let last_seq: usize = last_seq.parse().unwrap();
 
-            let new_milli: usize = if new_seq == "*" {
+            let new_milli: usize = if new_milli == "*" {
                 Utc::now().timestamp_millis() as usize
             } else {
                 new_milli.parse().unwrap()
@@ -374,6 +374,8 @@ impl RespServer {
             println!("{},{}", new_milli, new_seq);
             return Ok(format!("{}-{}", new_milli, new_seq));
         }
+
+
         let new_milli = if new_milli == "*" {
             Utc::now().timestamp_millis() as usize
         } else {
