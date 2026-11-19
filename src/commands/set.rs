@@ -29,6 +29,7 @@ impl RespServer {
         }
         let mut lock = self.storage.lock().unwrap();
         println!("key value being set {} {}",key,value);
+        println!("{:?}",lock);
         match lock.get_mut(&value) {
             Some(val) => {
                 println!("do we make it here and here is watched hashset {:?}",val.watched);
