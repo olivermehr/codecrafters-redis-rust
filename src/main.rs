@@ -136,7 +136,8 @@ impl RespServer {
         if let RespNode::Array(v) = &node
             && let Some(command_vec) = &mut self.command_queue
             && let Some(RespNode::BulkString(s)) = v.first()
-            && (s != "exec" || s != "discard")
+            && s != "exec"
+            && s != "discard"
         {
             command_vec.push(node);
             Ok(format_simple_string(String::from("QUEUED")))
