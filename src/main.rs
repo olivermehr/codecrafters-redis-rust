@@ -388,13 +388,13 @@ impl RespServer {
                     param_vec.remove(pos);
                     block.replace(param_vec.remove(pos).parse().unwrap());
                 }
-                println!("{:?}", param_vec);
 
                 assert!(param_vec.len() % 2 == 0);
                 let param_mid = param_vec.len() / 2;
                 let mut block_vec = Vec::new();
                 let mut stream_keys_vec = Vec::new();
                 let mut stream_vec = Vec::new();
+                // adding this scope to show the compiler that the mutex guard is dropped
                 {
                     let mut lock = self.storage.lock().unwrap();
 
@@ -412,17 +412,13 @@ impl RespServer {
                                 Ok(i) => i + 1,
                                 Err(i) => i,
                             };
-                            println!("index {index}");
+
                             if index == v.len() && block.is_some() {
-                                println!("entering blocking block with equal id -> len");
                                 let (tx, rx) = oneshot::channel();
                                 storage.queue.get_or_insert(tx);
                                 block_vec.push(rx);
                                 stream_keys_vec.push(stream_key.clone());
                             } else if index < v.len() && block.is_some() {
-                                println!(
-                                    "entering blocking block where data can be immediately returned"
-                                );
                                 return Ok(format_array(&[
                                     format_bulk_string(stream_key.clone()),
                                     format_stream_entries(&v[index..]),
@@ -441,34 +437,48 @@ impl RespServer {
                     for i in block_vec {
                         futures.push(i)
                     }
-                    tokio::select! {
-                    se = futures.next() => {
+                    if millis > 0 {
+                        tokio::select! {
+                        se = futures.next() => {
+                            if let Some(Ok(StorageType::Stream(mut v))) = se {
+                                let entry = v.remove(0);
+                                return Ok(format_array(&[format_array(&[
+                                format_bulk_string(entry.stream_key.clone()),
+                                format_stream_entries(&[entry]),
+                            ])]));
+
+                            }
+
+                            },
+                        _ = tokio::time::sleep(Duration::from_millis(millis as u64)) => {
+                            for key in stream_keys_vec {
+                                self.storage
+                                    .lock()
+                                    .unwrap()
+                                    .get_mut(&key)
+                                    .unwrap()
+                                    .queue = None;
+
+
+                            }
+
+                            return Ok(format_null_array())
+
+                        }
+
+                        }
+                    } else {
+                        let se = futures.next().await;
                         if let Some(Ok(StorageType::Stream(mut v))) = se {
                             let entry = v.remove(0);
+                            for key in stream_keys_vec {
+                                self.storage.lock().unwrap().get_mut(&key).unwrap().queue = None;
+                            }
                             return Ok(format_array(&[format_array(&[
-                            format_bulk_string(entry.stream_key.clone()),
-                            format_stream_entries(&[entry]),
-                        ])]));
-
+                                format_bulk_string(entry.stream_key.clone()),
+                                format_stream_entries(&[entry]),
+                            ])]));
                         }
-
-                        },
-                    _ = tokio::time::sleep(Duration::from_millis(millis as u64)) => {
-                        for key in stream_keys_vec {
-                            self.storage
-                                .lock()
-                                .unwrap()
-                                .get_mut(&key)
-                                .unwrap()
-                                .queue = None;
-
-
-                        }
-
-                        return Ok(format_null_array())
-
-                    }
-
                     }
                 }
                 Ok(format_array(&stream_vec))
