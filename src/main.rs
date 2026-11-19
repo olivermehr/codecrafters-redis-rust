@@ -406,12 +406,16 @@ impl RespServer {
                             && !v.is_empty()
                         {
                             let start_id: &String = &param_vec[i + param_mid];
-                            let index = match v
+                            let index = if start_id == "$" && block.is_some() {
+                                v.len()
+
+                            } else {
+                                match v
                                 .binary_search_by_key(&start_id.as_str(), |e| e.id.as_str())
                             {
                                 Ok(i) => i + 1,
                                 Err(i) => i,
-                            };
+                            }};
 
                             if index == v.len() && block.is_some() {
                                 let (tx, rx) = oneshot::channel();
