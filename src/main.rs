@@ -389,6 +389,7 @@ impl RespServer {
                     param_vec.remove(pos);
                     param_vec.remove(pos + 1);
                 }
+                println!("{}",param_vec);
 
                 assert!(param_vec.len() % 2 == 0);
                 let param_mid = param_vec.len() / 2;
@@ -420,7 +421,9 @@ impl RespServer {
                                 block_vec.push(rx);
                                 stream_keys_vec.push(stream_key.clone());
                             } else if index < v.len() && block.is_some() {
-                                println!("entering blocking block where data can be immediately returned");
+                                println!(
+                                    "entering blocking block where data can be immediately returned"
+                                );
                                 return Ok(format_array(&[
                                     format_bulk_string(stream_key.clone()),
                                     format_stream_entries(&v[index..]),
