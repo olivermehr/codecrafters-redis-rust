@@ -30,7 +30,7 @@ mod resp;
 
 #[derive(Debug, Clone)]
 struct RespServer {
-    command_queue: Option<Vec<RespNode>>,
+    command_queue: Option<Vec<Vec<RespNode>>>,
     storage: Arc<Mutex<HashMap<String, Storage>>>,
 }
 
@@ -109,6 +109,10 @@ impl RespServer {
 
     async fn visit(&mut self, node: RespNode, tx: Sender<Expiry>) -> Result<String, RespError> {
         if let RespNode::Array(v) = node {
+            if let Some(command_vec) = &mut self.command_queue {
+                command_vec.push(v);
+                return Ok(format_simple_string(String::from("QUEUED")));
+            }
             let mut args = v.into_iter();
             let fn_name = get_bulk_string_arg(args.next())?;
             let command = commands::COMMANDS
