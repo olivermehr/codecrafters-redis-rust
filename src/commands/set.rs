@@ -31,6 +31,7 @@ impl RespServer {
         println!("key value being set {} {}",key,value);
         match lock.get_mut(&value) {
             Some(val) => {
+                println!("do we make it here and here is watched hashset {:?}",val.watched);
                 val.content = crate::StorageType::String(value);
                 for i in val.watched.drain() {
                     println!("watches stored {}",i);
