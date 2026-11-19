@@ -39,6 +39,7 @@ struct RespServer {
 
 impl Clone for RespServer {
     fn clone(&self) -> Self {
+        println!("connection no : {}",self.connection_no);
         Self {
             connection_no: self.connection_no + 1,
             command_queue: self.command_queue.clone(),
