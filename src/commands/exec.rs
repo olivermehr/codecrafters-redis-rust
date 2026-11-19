@@ -8,7 +8,7 @@ impl RespServer {
     pub async fn exec(&mut self, mut v: CommandArgs) -> Result<String, RespError> {
         match self.command_queue.take() {
             Some(commands) => {
-                println!("trigges from exec {:?}",self.triggered_watches);
+                println!("triggers from exec {:?}",self.triggered_watches);
                 if let Some(trigger) = self
                     .triggered_watches
                     .lock()
