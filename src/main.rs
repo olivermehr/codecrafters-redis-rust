@@ -109,7 +109,10 @@ impl RespServer {
 
     async fn visit(&mut self, node: RespNode, tx: Sender<Expiry>) -> Result<String, RespError> {
         if let RespNode::Array(v) = node {
-            if let Some(command_vec) = &mut self.command_queue {
+            if let Some(command_vec) = &mut self.command_queue
+                && let Some(RespNode::BulkString(s)) = v.first()
+                && s != "exec"
+            {
                 command_vec.push(v);
                 return Ok(format_simple_string(String::from("QUEUED")));
             }
