@@ -28,6 +28,7 @@ impl RespServer {
             }
         }
         let mut lock = self.storage.lock().unwrap();
+        println!("key value being set {} {}",key,value);
         match lock.get_mut(&value) {
             Some(val) => {
                 val.content = crate::StorageType::String(value);
