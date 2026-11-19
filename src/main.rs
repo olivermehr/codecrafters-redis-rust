@@ -31,6 +31,7 @@ mod resp;
 #[derive(Debug, Clone)]
 struct RespServer {
     command_queue: Option<Vec<RespNode>>,
+    watched_keys: Vec<String>,
     expiry_tx: Sender<Expiry>,
     storage: Arc<Mutex<HashMap<String, Storage>>>,
 }
@@ -119,6 +120,7 @@ impl RespServer {
             storage,
             command_queue: None,
             expiry_tx: tx,
+            watched_keys: Vec::new(),
         }
     }
 

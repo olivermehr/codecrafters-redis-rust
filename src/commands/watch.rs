@@ -5,6 +5,12 @@ use crate::{
 
 impl RespServer {
     pub async fn watch(&mut self, mut v: CommandArgs) -> Result<String, RespError> {
-        Ok(format_simple_string(String::from("OK")))
+        let key_name = get_bulk_string_arg(v.next())?;
+        if self.command_queue.is_none() {
+            self.watched_keys.push(key_name);
+            Ok(format_simple_string(String::from("OK")))
+        } else {
+            Ok(format_error_string("WATCH inside MULTI is not allowed"))
+        }
     }
 }
