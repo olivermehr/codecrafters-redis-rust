@@ -1,6 +1,5 @@
 use crate::{
-    RespServer, Storage, StorageType, commands::CommandArgs, format_integer_string,
-    get_bulk_string_arg, resp::error::RespError,
+    RespServer, Storage, StorageType, commands::CommandArgs, format_error_string, format_integer_string, get_bulk_string_arg, resp::error::RespError,
 };
 
 impl RespServer {
@@ -11,9 +10,17 @@ impl RespServer {
         match lock.get_mut(&key_name) {
             Some(val) => {
                 if let StorageType::String(s) = &mut val.content {
-                    let num = s.parse::<usize>().unwrap() + 1;
-                    *s = num.to_string();
-                    return Ok(format_integer_string(num as isize));
+                    let num = s.parse::<usize>();
+                    match num {
+                        Ok(mut n) => {
+                            n += 1;
+                            *s = n.to_string();s
+                            return Ok(format_integer_string(n as isize));
+
+                        },
+                        Err(e) => return Ok(format_error_string("value is not an integer or out of range"))
+                    }
+                    
                 }
                 panic!("unsupported storage type")
             }
