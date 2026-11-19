@@ -412,12 +412,15 @@ impl RespServer {
                                 Ok(i) => i + 1,
                                 Err(i) => i,
                             };
+                            println!("index {index}");
                             if index == v.len() && block.is_some() {
+                                println!("entering blocking block with equal id -> len");
                                 let (tx, rx) = oneshot::channel();
                                 storage.queue.get_or_insert(tx);
                                 block_vec.push(rx);
                                 stream_keys_vec.push(stream_key.clone());
                             } else if index < v.len() && block.is_some() {
+                                println!("entering blocking block where data can be immediately returned");
                                 return Ok(format_array(&[
                                     format_bulk_string(stream_key.clone()),
                                     format_stream_entries(&v[index..]),
