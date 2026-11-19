@@ -254,6 +254,7 @@ async fn main() {
         match listener.accept().await {
             Ok((mut stream, _)) => {
                 let mut cloned_server = server.clone();
+                println!("{}",cloned_server.connection_no);
                 tokio::spawn(async move {
                     let mut buf = [0; 1024];
                     let mut read_index = 0;
