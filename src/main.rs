@@ -445,10 +445,10 @@ impl RespServer {
                     se = futures.next() => {
                         if let Some(Ok(StorageType::Stream(mut v))) = se {
                             let entry = v.remove(0);
-                            return Ok(format_array(&[
+                            return Ok(format_array(&[format_array(&[
                             format_bulk_string(entry.stream_key.clone()),
                             format_stream_entries(&[entry]),
-                        ]));
+                        ])]));
 
                         }
 
