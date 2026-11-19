@@ -388,16 +388,9 @@ impl RespServer {
                         let start_id: &String = &param_vec[i + param_mid];
                         let mut index =
                             match v.binary_search_by_key(&start_id.as_str(), |e| e.id.as_str()) {
-                                Ok(i) => i,
+                                Ok(i) => i + 1,
                                 Err(i) => i,
                             };
-                        for e in v[index..].iter() {
-                            if &e.id > start_id {
-                                break;
-                            }
-                            index += 1
-                        }
-
                         stream_vec.push(format_array(&[
                             format_bulk_string(stream_key.clone()),
                             format_stream_entries(&v[index..]),
