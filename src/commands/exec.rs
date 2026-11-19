@@ -10,7 +10,11 @@ impl RespServer {
                 if commands.is_empty() {
                     return Ok(format_array(&[]));
                 }
-                todo!()
+                let mut response_vec = Vec::new();
+                for node in commands {
+                    response_vec.push(self.visit(node).await?)
+                }
+                Ok(format_array(&response_vec))
             }
             None => Ok(format_error_string("EXEC without MULTI")),
         }

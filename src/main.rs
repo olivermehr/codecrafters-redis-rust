@@ -30,7 +30,8 @@ mod resp;
 
 #[derive(Debug, Clone)]
 struct RespServer {
-    command_queue: Option<Vec<Vec<RespNode>>>,
+    command_queue: Option<Vec<RespNode>>,
+    expiry_tx: Sender<Expiry>,
     storage: Arc<Mutex<HashMap<String, Storage>>>,
 }
 
@@ -91,9 +92,33 @@ static EMPTY_ARRAY: &[String; 0] = &[];
 
 impl RespServer {
     fn new() -> Self {
+        let (tx, mut rx) = mpsc::channel::<Expiry>(50);
+        let storage = Arc::new(Mutex::new(HashMap::new()));
+
+        // fire up the worker that handles key/value expiry
+        tokio::spawn({
+            let storage_clone = storage.clone();
+            async move {
+                while let Some(expiry) = rx.recv().await {
+                    tokio::spawn({
+                        let spawn_storage = storage_clone.clone();
+                        async move {
+                            tokio::time::sleep(Duration::from_millis(expiry.millis)).await;
+                            loop {
+                                if let Ok(mut map) = spawn_storage.try_lock() {
+                                    map.remove(&expiry.key);
+                                    break;
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+        });
         Self {
-            storage: Arc::new(Mutex::new(HashMap::new())),
+            storage,
             command_queue: None,
+            expiry_tx: tx,
         }
     }
 
@@ -107,21 +132,21 @@ impl RespServer {
         }
     }
 
-    async fn visit(&mut self, node: RespNode, tx: Sender<Expiry>) -> Result<String, RespError> {
-        if let RespNode::Array(v) = node {
-            if let Some(command_vec) = &mut self.command_queue
-                && let Some(RespNode::BulkString(s)) = v.first()
-                && s != "exec"
-            {
-                command_vec.push(v);
-                return Ok(format_simple_string(String::from("QUEUED")));
-            }
+    async fn visit(&mut self, node: RespNode) -> Result<String, RespError> {
+        if let RespNode::Array(v) = &node
+            && let Some(command_vec) = &mut self.command_queue
+            && let Some(RespNode::BulkString(s)) = v.first()
+            && s != "exec"
+        {
+            command_vec.push(node);
+            return Ok(format_simple_string(String::from("QUEUED")));
+        } else if let RespNode::Array(v) = node {
             let mut args = v.into_iter();
             let fn_name = get_bulk_string_arg(args.next())?;
             let command = commands::COMMANDS
                 .get(fn_name.as_str())
                 .expect("unsupported fn name");
-            command(self, args, tx).await
+            command(self, args).await
         } else {
             Err(RespError::InvalidSyntax)
         }
@@ -205,32 +230,11 @@ struct Expiry {
 async fn main() {
     let listener = TcpListener::bind("127.0.0.1:6379").await.unwrap();
     let server = RespServer::new();
-    let (tx, mut rx) = mpsc::channel::<Expiry>(50);
-    tokio::spawn({
-        let cloned_server = server.clone();
-        async move {
-            while let Some(expiry) = rx.recv().await {
-                tokio::spawn({
-                    let spawn_sever = cloned_server.clone();
-                    async move {
-                        tokio::time::sleep(Duration::from_millis(expiry.millis)).await;
-                        loop {
-                            if let Ok(mut map) = spawn_sever.storage.try_lock() {
-                                map.remove(&expiry.key);
-                                break;
-                            }
-                        }
-                    }
-                });
-            }
-        }
-    });
+
     loop {
         match listener.accept().await {
             Ok((mut stream, _)) => {
                 let mut cloned_server = server.clone();
-                let tx_clone = tx.clone();
-
                 tokio::spawn(async move {
                     let mut buf = [0; 1024];
                     let mut read_index = 0;
@@ -257,7 +261,7 @@ async fn main() {
                             }
                         }
                         for node in tree.into_iter() {
-                            match cloned_server.visit(node, tx_clone.clone()).await {
+                            match cloned_server.visit(node).await {
                                 Ok(s) => {
                                     stream.write_all(s.as_bytes()).await.unwrap();
                                 }

@@ -27,31 +27,28 @@ mod xrange;
 mod xread;
 
 type CommandArgs = IntoIter<RespNode>;
-type CommandFn = for<'a> fn(
-    &'a mut RespServer,
-    CommandArgs,
-    Sender<Expiry>,
-) -> BoxFuture<'a, Result<String, RespError>>;
+type CommandFn =
+    for<'a> fn(&'a mut RespServer, CommandArgs) -> BoxFuture<'a, Result<String, RespError>>;
 
 pub(crate) static COMMANDS: LazyLock<HashMap<&'static str, CommandFn>> = LazyLock::new(|| {
     let commands: [(&'static str, CommandFn); 17] = [
-        ("ping", |server, _args, _tx| Box::pin(server.ping())),
-        ("echo", |server, args, _tx| Box::pin(server.echo(args))),
-        ("set", |server, args, tx| Box::pin(server.set(args, tx))),
-        ("get", |server, args, _tx| Box::pin(server.get(args))),
-        ("rpush", |server, args, _tx| Box::pin(server.rpush(args))),
-        ("lpush", |server, args, _tx| Box::pin(server.lpush(args))),
-        ("lrange", |server, args, _tx| Box::pin(server.lrange(args))),
-        ("llen", |server, args, _tx| Box::pin(server.llen(args))),
-        ("lpop", |server, args, _tx| Box::pin(server.lpop(args))),
-        ("blpop", |server, args, _tx| Box::pin(server.blpop(args))),
-        ("type", |server, args, _tx| Box::pin(server.r#type(args))),
-        ("xadd", |server, args, _tx| Box::pin(server.xadd(args))),
-        ("xrange", |server, args, _tx| Box::pin(server.xrange(args))),
-        ("xread", |server, args, _tx| Box::pin(server.xread(args))),
-        ("incr", |server, args, tx| Box::pin(server.incr(args))),
-        ("multi", |server, args, tx| Box::pin(server.multi(args))),
-        ("exec", |server, args, tx| Box::pin(server.exec(args))),
+        ("ping", |server, _args| Box::pin(server.ping())),
+        ("echo", |server, args| Box::pin(server.echo(args))),
+        ("set", |server, args| Box::pin(server.set(args))),
+        ("get", |server, args| Box::pin(server.get(args))),
+        ("rpush", |server, args| Box::pin(server.rpush(args))),
+        ("lpush", |server, args| Box::pin(server.lpush(args))),
+        ("lrange", |server, args| Box::pin(server.lrange(args))),
+        ("llen", |server, args| Box::pin(server.llen(args))),
+        ("lpop", |server, args| Box::pin(server.lpop(args))),
+        ("blpop", |server, args| Box::pin(server.blpop(args))),
+        ("type", |server, args| Box::pin(server.r#type(args))),
+        ("xadd", |server, args| Box::pin(server.xadd(args))),
+        ("xrange", |server, args| Box::pin(server.xrange(args))),
+        ("xread", |server, args| Box::pin(server.xread(args))),
+        ("incr", |server, args| Box::pin(server.incr(args))),
+        ("multi", |server, args| Box::pin(server.multi(args))),
+        ("exec", |server, args| Box::pin(server.exec(args))),
     ];
     HashMap::from(commands)
 });
