@@ -30,6 +30,7 @@ mod resp;
 
 #[derive(Debug, Clone)]
 struct RespServer {
+    command_queue: Option<Vec<RespNode>>,
     storage: Arc<Mutex<HashMap<String, Storage>>>,
 }
 
@@ -92,6 +93,7 @@ impl RespServer {
     fn new() -> Self {
         Self {
             storage: Arc::new(Mutex::new(HashMap::new())),
+            command_queue: None,
         }
     }
 

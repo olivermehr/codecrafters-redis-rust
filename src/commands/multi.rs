@@ -5,6 +5,7 @@ use crate::{
 
 impl RespServer {
     pub async fn multi(&mut self, mut v: CommandArgs) -> Result<String, RespError> {
+        self.command_queue.replace(Vec::new());
         Ok(format_simple_string(String::from("OK")))
     }
 }

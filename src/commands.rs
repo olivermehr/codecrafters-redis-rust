@@ -10,6 +10,7 @@ use crate::{
 
 mod blpop;
 mod echo;
+mod exec;
 mod get;
 mod incr;
 mod llen;
@@ -33,7 +34,7 @@ type CommandFn = for<'a> fn(
 ) -> BoxFuture<'a, Result<String, RespError>>;
 
 pub(crate) static COMMANDS: LazyLock<HashMap<&'static str, CommandFn>> = LazyLock::new(|| {
-    let commands: [(&'static str, CommandFn); 16] = [
+    let commands: [(&'static str, CommandFn); 17] = [
         ("ping", |server, _args, _tx| Box::pin(server.ping())),
         ("echo", |server, args, _tx| Box::pin(server.echo(args))),
         ("set", |server, args, tx| Box::pin(server.set(args, tx))),
@@ -50,6 +51,7 @@ pub(crate) static COMMANDS: LazyLock<HashMap<&'static str, CommandFn>> = LazyLoc
         ("xread", |server, args, _tx| Box::pin(server.xread(args))),
         ("incr", |server, args, tx| Box::pin(server.incr(args))),
         ("multi", |server, args, tx| Box::pin(server.multi(args))),
+        ("exec", |server, args, tx| Box::pin(server.exec(args))),
     ];
     HashMap::from(commands)
 });
