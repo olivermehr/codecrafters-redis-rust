@@ -136,10 +136,10 @@ impl RespServer {
         if let RespNode::Array(v) = &node
             && let Some(command_vec) = &mut self.command_queue
             && let Some(RespNode::BulkString(s)) = v.first()
-            && s != "exec"
+            && (s != "exec" || s != "discard")
         {
             command_vec.push(node);
-            return Ok(format_simple_string(String::from("QUEUED")));
+            Ok(format_simple_string(String::from("QUEUED")))
         } else if let RespNode::Array(v) = node {
             let mut args = v.into_iter();
             let fn_name = get_bulk_string_arg(args.next())?;
