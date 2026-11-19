@@ -389,7 +389,7 @@ impl RespServer {
                     param_vec.remove(pos);
                     param_vec.remove(pos + 1);
                 }
-                println!("{}",param_vec);
+                println!("{:?}", param_vec);
 
                 assert!(param_vec.len() % 2 == 0);
                 let param_mid = param_vec.len() / 2;
