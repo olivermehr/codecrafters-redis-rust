@@ -28,14 +28,17 @@ impl RespServer {
             }
         }
         let mut lock = self.storage.lock().unwrap();
-        println!("key value being set {} {}",key,value);
-        println!("{:?}",lock);
+        println!("key value being set {} {}", key, value);
+        println!("{:?}", lock.get(&value));
         match lock.get_mut(&value) {
             Some(val) => {
-                println!("do we make it here and here is watched hashset {:?}",val.watched);
+                println!(
+                    "do we make it here and here is watched hashset {:?}",
+                    val.watched
+                );
                 val.content = crate::StorageType::String(value);
                 for i in val.watched.drain() {
-                    println!("watches stored {}",i);
+                    println!("watches stored {}", i);
                     self.triggered_watches.lock().unwrap().insert(i, true);
                 }
             }
