@@ -16,6 +16,7 @@ mod llen;
 mod lpop;
 mod lpush;
 mod lrange;
+mod multi;
 mod ping;
 mod rpush;
 mod set;
@@ -32,7 +33,7 @@ type CommandFn = for<'a> fn(
 ) -> BoxFuture<'a, Result<String, RespError>>;
 
 pub(crate) static COMMANDS: LazyLock<HashMap<&'static str, CommandFn>> = LazyLock::new(|| {
-    let commands: [(&'static str, CommandFn); 15] = [
+    let commands: [(&'static str, CommandFn); 16] = [
         ("ping", |server, _args, _tx| Box::pin(server.ping())),
         ("echo", |server, args, _tx| Box::pin(server.echo(args))),
         ("set", |server, args, tx| Box::pin(server.set(args, tx))),
@@ -48,6 +49,7 @@ pub(crate) static COMMANDS: LazyLock<HashMap<&'static str, CommandFn>> = LazyLoc
         ("xrange", |server, args, _tx| Box::pin(server.xrange(args))),
         ("xread", |server, args, _tx| Box::pin(server.xread(args))),
         ("incr", |server, args, tx| Box::pin(server.incr(args))),
+        ("multi", |server, args, tx| Box::pin(server.multi(args))),
     ];
     HashMap::from(commands)
 });
