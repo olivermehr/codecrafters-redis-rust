@@ -1,10 +1,11 @@
-use std::time::Duration;
-use tokio::sync::oneshot;
-use futures::stream::{FuturesUnordered, StreamExt};
 use super::{CommandArgs, RespError, RespServer};
 use crate::{
-    StorageType, format_bulk_string, format_null_array, get_bulk_string_arg, format_array, format_stream_entries,
+    StorageType, format_array, format_bulk_string, format_null_array, format_stream_entries,
+    get_bulk_string_arg,
 };
+use futures::stream::{FuturesUnordered, StreamExt};
+use std::time::Duration;
+use tokio::sync::oneshot;
 
 impl RespServer {
     pub(crate) async fn xread(&mut self, mut v: CommandArgs) -> Result<String, RespError> {
@@ -41,14 +42,12 @@ impl RespServer {
                     let start_id: &String = &param_vec[i + param_mid];
                     let index = if start_id == "$" && block.is_some() {
                         v.len()
-
                     } else {
-                        match v
-                        .binary_search_by_key(&start_id.as_str(), |e| e.id.as_str())
-                    {
-                        Ok(i) => i + 1,
-                        Err(i) => i,
-                    }};
+                        match v.binary_search_by_key(&start_id.as_str(), |e| e.id.as_str()) {
+                            Ok(i) => i + 1,
+                            Err(i) => i,
+                        }
+                    };
 
                     if index == v.len() && block.is_some() {
                         let (tx, rx) = oneshot::channel();
