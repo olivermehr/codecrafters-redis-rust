@@ -385,9 +385,8 @@ impl RespServer {
                     param_vec.remove(pos);
                 }
                 if let Some(pos) = param_vec.iter().position(|p| p.as_str() == "block") {
-                    block.replace(param_vec[pos + 1].parse().unwrap());
                     param_vec.remove(pos);
-                    param_vec.remove(pos + 1);
+                    block.replace(param_vec.remove(pos).parse().unwrap());
                 }
                 println!("{:?}", param_vec);
 
