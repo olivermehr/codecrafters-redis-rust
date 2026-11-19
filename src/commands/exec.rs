@@ -14,6 +14,7 @@ impl RespServer {
                     .unwrap()
                     .get_mut(&self.connection_no)
                 {
+                    println!("trigger {}",trigger);
                     *trigger = false;
                     return Ok(format_null_array());
                 }
