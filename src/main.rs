@@ -1,4 +1,5 @@
 #![allow(unused_imports)]
+use futures::stream::{FuturesUnordered, StreamExt};
 
 use core::error;
 use std::{
@@ -51,6 +52,7 @@ impl Storage {
 #[derive(Debug, Clone)]
 struct StreamEntries {
     id: String,
+    stream_key: String,
     data: Vec<(String, String)>,
 }
 
@@ -308,13 +310,18 @@ impl RespServer {
                 }
                 let mut lock = self.storage.lock().unwrap();
                 let stream = lock
-                    .entry(stream_key)
+                    .entry(stream_key.clone())
                     .or_insert(Storage::new(StorageType::Stream(Vec::new())));
                 if let StorageType::Stream(v) = &mut stream.content {
-                    v.push(StreamEntries {
+                    let se = StreamEntries {
                         id: id.clone(),
+                        stream_key,
                         data: kp_vec,
-                    });
+                    };
+                    if let Some(tx) = stream.queue.take() {
+                        tx.send(StorageType::Stream(vec![se.clone()])).unwrap();
+                    }
+                    v.push(se);
                 }
                 Ok(format_bulk_string(id))
             } else if fn_name == "xrange" {
@@ -368,33 +375,95 @@ impl RespServer {
                 }
                 Ok(format_array(EMPTY_ARRAY))
             } else if fn_name == "xread" {
-                // skip streams keyword
-                v.next();
                 let mut param_vec = Vec::new();
                 while let Ok(p) = get_bulk_string_arg(v.next()) {
                     param_vec.push(p)
                 }
+                let mut block: Option<usize> = None;
+
+                if let Some(pos) = param_vec.iter().position(|p| p.as_str() == "streams") {
+                    param_vec.remove(pos);
+                }
+                if let Some(pos) = param_vec.iter().position(|p| p.as_str() == "block") {
+                    block.replace(param_vec[pos + 1].parse().unwrap());
+                    param_vec.remove(pos);
+                    param_vec.remove(pos + 1);
+                }
+
                 assert!(param_vec.len() % 2 == 0);
                 let param_mid = param_vec.len() / 2;
-                let lock = self.storage.lock().unwrap();
+                let mut block_vec = Vec::new();
+                let mut stream_keys_vec = Vec::new();
                 let mut stream_vec = Vec::new();
-                for i in 0..param_mid {
-                    let stream_key = &param_vec[i];
-                    let storage = lock.get(stream_key);
-                    if let Some(storage) = storage
-                        && let StorageType::Stream(v) = &storage.content
-                        && !v.is_empty()
-                    {
-                        let start_id: &String = &param_vec[i + param_mid];
-                        let mut index =
-                            match v.binary_search_by_key(&start_id.as_str(), |e| e.id.as_str()) {
+                {
+                    let mut lock = self.storage.lock().unwrap();
+
+                    for i in 0..param_mid {
+                        let stream_key = &param_vec[i];
+                        let storage = lock.get_mut(stream_key);
+                        if let Some(storage) = storage
+                            && let StorageType::Stream(v) = &storage.content
+                            && !v.is_empty()
+                        {
+                            let start_id: &String = &param_vec[i + param_mid];
+                            let index = match v
+                                .binary_search_by_key(&start_id.as_str(), |e| e.id.as_str())
+                            {
                                 Ok(i) => i + 1,
                                 Err(i) => i,
                             };
-                        stream_vec.push(format_array(&[
-                            format_bulk_string(stream_key.clone()),
-                            format_stream_entries(&v[index..]),
+                            if index == v.len() && block.is_some() {
+                                let (tx, rx) = oneshot::channel();
+                                storage.queue.get_or_insert(tx);
+                                block_vec.push(rx);
+                                stream_keys_vec.push(stream_key.clone());
+                            } else if index < v.len() && block.is_some() {
+                                return Ok(format_array(&[
+                                    format_bulk_string(stream_key.clone()),
+                                    format_stream_entries(&v[index..]),
+                                ]));
+                            } else {
+                                stream_vec.push(format_array(&[
+                                    format_bulk_string(stream_key.clone()),
+                                    format_stream_entries(&v[index..]),
+                                ]));
+                            }
+                        }
+                    }
+                }
+                if let Some(millis) = block {
+                    let mut futures = FuturesUnordered::new();
+                    for i in block_vec {
+                        futures.push(i)
+                    }
+                    tokio::select! {
+                    se = futures.next() => {
+                        if let Some(Ok(StorageType::Stream(mut v))) = se {
+                            let entry = v.remove(0);
+                            return Ok(format_array(&[
+                            format_bulk_string(entry.stream_key.clone()),
+                            format_stream_entries(&[entry]),
                         ]));
+
+                        }
+
+                        },
+                    _ = tokio::time::sleep(Duration::from_millis(millis as u64)) => {
+                        for key in stream_keys_vec {
+                            self.storage
+                                .lock()
+                                .unwrap()
+                                .get_mut(&key)
+                                .unwrap()
+                                .queue = None;
+
+
+                        }
+
+                        return Ok(format_null_array())
+
+                    }
+
                     }
                 }
                 Ok(format_array(&stream_vec))
