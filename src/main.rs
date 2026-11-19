@@ -3,7 +3,7 @@ use core::error;
 use std::{
     array,
     borrow::Cow,
-    collections::{HashMap, VecDeque, btree_map::Entry},
+    collections::{HashMap, HashSet, VecDeque, btree_map::Entry},
     fmt::Display,
     fs::read,
     ops::Add,
@@ -28,17 +28,31 @@ use crate::resp::{
 mod commands;
 mod resp;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct RespServer {
+    connection_no: usize,
     command_queue: Option<Vec<RespNode>>,
-    watched_keys: Vec<String>,
+    triggered_watches: Arc<Mutex<HashMap<usize, bool>>>,
     expiry_tx: Sender<Expiry>,
     storage: Arc<Mutex<HashMap<String, Storage>>>,
+}
+
+impl Clone for RespServer {
+    fn clone(&self) -> Self {
+        Self {
+            connection_no: self.connection_no + 1,
+            command_queue: self.command_queue.clone(),
+            triggered_watches: self.triggered_watches.clone(),
+            expiry_tx: self.expiry_tx.clone(),
+            storage: self.storage.clone(),
+        }
+    }
 }
 
 #[derive(Debug)]
 struct Storage {
     content: StorageType,
+    watched: HashSet<usize>,
     queue: Option<tokio::sync::oneshot::Sender<StorageType>>,
 }
 
@@ -47,6 +61,7 @@ impl Storage {
         Self {
             content,
             queue: None,
+            watched: HashSet::new(),
         }
     }
 }
@@ -121,7 +136,8 @@ impl RespServer {
             storage,
             command_queue: None,
             expiry_tx: tx,
-            watched_keys: Vec::new(),
+            triggered_watches: Arc::new(Mutex::new(HashMap::new())),
+            connection_no: 0,
         }
     }
 

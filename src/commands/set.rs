@@ -27,10 +27,18 @@ impl RespServer {
                     .unwrap();
             }
         }
-        self.storage
-            .lock()
-            .unwrap()
-            .insert(key, Storage::new(value.into()));
+        let mut lock = self.storage.lock().unwrap();
+        match lock.get_mut(&value) {
+            Some(val) => {
+                val.content = crate::StorageType::String(value);
+                for i in val.watched.drain() {
+                    self.triggered_watches.lock().unwrap().insert(i, true);
+                }
+            }
+            None => {
+                lock.insert(key, Storage::new(value.into()));
+            }
+        }
         Ok(format_simple_string(String::from("OK")))
     }
 }
