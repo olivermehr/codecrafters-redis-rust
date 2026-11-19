@@ -32,6 +32,7 @@ impl RespServer {
             Some(val) => {
                 val.content = crate::StorageType::String(value);
                 for i in val.watched.drain() {
+                    println!("watches stored {}",i);
                     self.triggered_watches.lock().unwrap().insert(i, true);
                 }
             }
