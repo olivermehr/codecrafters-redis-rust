@@ -90,6 +90,7 @@ impl From<StorageType> for String {
 }
 
 static EMPTY_ARRAY: &[String; 0] = &[];
+static NON_MULTI_COMMANDS: &[&str] = &["exec", "discard", "watch"];
 
 impl RespServer {
     fn new() -> Self {
@@ -138,8 +139,7 @@ impl RespServer {
         if let RespNode::Array(v) = &node
             && let Some(command_vec) = &mut self.command_queue
             && let Some(RespNode::BulkString(s)) = v.first()
-            && s != "exec"
-            && s != "discard"
+            && !NON_MULTI_COMMANDS.contains(&s.as_str())
         {
             command_vec.push(node);
             Ok(format_simple_string(String::from("QUEUED")))
