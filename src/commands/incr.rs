@@ -10,8 +10,9 @@ impl RespServer {
 
         match lock.get_mut(&key_name) {
             Some(val) => {
-                if let StorageType::String(s) = &val.content {
+                if let StorageType::String(s) = &mut val.content {
                     let num = s.parse::<usize>().unwrap() + 1;
+                    *s = num.to_string();
                     return Ok(format_integer_string(num as isize));
                 }
                 panic!("unsupported storage type")
