@@ -42,9 +42,10 @@ struct RespServer {
 
 impl Clone for RespServer {
     fn clone(&self) -> Self {
-        println!("connection no : {}", self.connection_no);
+        let new_conn_no = SERVER_INDEX.fetch_add(1, atomic::Ordering::Relaxed) as usize;
+        println!("New connection no for clone {}", new_conn_no);
         Self {
-            connection_no: SERVER_INDEX.fetch_add(1, atomic::Ordering::Relaxed) as usize,
+            connection_no: new_conn_no,
             command_queue: self.command_queue.clone(),
             triggered_watches: self.triggered_watches.clone(),
             expiry_tx: self.expiry_tx.clone(),

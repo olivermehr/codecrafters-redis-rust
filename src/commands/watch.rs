@@ -10,8 +10,8 @@ impl RespServer {
             self.storage
                 .lock()
                 .unwrap()
-                .get_mut(&key_name)
-                .unwrap()
+                .entry(key_name)
+                .or_insert(Storage::new(StorageType::String(String::new())))
                 .watched
                 .insert(self.connection_no);
             Ok(format_simple_string(String::from("OK")))
