@@ -1,7 +1,7 @@
+use super::{CommandArgs, RespError, RespServer};
+use crate::{format_array, format_bulk_string, format_null_array, get_bulk_string_arg};
 use std::time::Duration;
 use tokio::sync::oneshot;
-use super::{CommandArgs, RespError, RespServer};
-use crate::{format_bulk_string, format_null_array, get_bulk_string_arg, format_array};
 
 impl RespServer {
     pub(crate) async fn blpop(&mut self, mut v: CommandArgs) -> Result<String, RespError> {
@@ -22,12 +22,10 @@ impl RespServer {
                     .get_mut(&list_name)
                     .unwrap()
                     .queue
-                    .get_or_insert(tx);
+                    .push_back(tx);
 
                 if timeout == 0.0 {
-                    let value = rx.await;
-                    println!("{value:?}");
-                    let value = value.unwrap();
+                    let value = rx.await.unwrap();
                     Ok(format_array(&[
                         format_bulk_string(list_name),
                         format_bulk_string(value.into()),
@@ -35,12 +33,7 @@ impl RespServer {
                 } else if timeout > 0.0 {
                     tokio::select! {
                         _ = tokio::time::sleep(Duration::from_millis(timeout as u64)) => {
-                                    self.storage
-                        .lock()
-                        .unwrap()
-                        .get_mut(&list_name)
-                        .unwrap()
-                        .queue = None;
+
                     Ok(format_null_array())
 
 

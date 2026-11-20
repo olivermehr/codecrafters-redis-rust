@@ -1,6 +1,7 @@
 use super::{CommandArgs, RespError, RespServer};
 use crate::{
-    Storage, StorageType, StreamEntries, format_bulk_string, format_error_string, get_bulk_string_arg,
+    Storage, StorageType, StreamEntries, format_bulk_string, format_error_string,
+    get_bulk_string_arg,
 };
 
 impl RespServer {
@@ -26,8 +27,8 @@ impl RespServer {
                 stream_key,
                 data: kp_vec,
             };
-            if let Some(tx) = stream.queue.take() {
-                tx.send(StorageType::Stream(vec![se.clone()])).unwrap();
+            for sender in stream.queue.drain(..) {
+                sender.send(StorageType::Stream(vec![se.clone()])).unwrap();
             }
             v.push(se);
         }

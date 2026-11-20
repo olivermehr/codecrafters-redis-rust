@@ -58,14 +58,14 @@ impl Clone for RespServer {
 struct Storage {
     content: StorageType,
     watched: HashSet<usize>,
-    queue: Option<tokio::sync::oneshot::Sender<StorageType>>,
+    queue: VecDeque<tokio::sync::oneshot::Sender<StorageType>>,
 }
 
 impl Storage {
     fn new(content: StorageType) -> Self {
         Self {
             content,
-            queue: None,
+            queue: VecDeque::new(),
             watched: HashSet::new(),
         }
     }
@@ -149,12 +149,10 @@ impl RespServer {
 
     fn handle_bl_pop(
         &self,
-        queue: &mut Option<tokio::sync::oneshot::Sender<StorageType>>,
+        queue: &mut VecDeque<tokio::sync::oneshot::Sender<StorageType>>,
         value: String,
     ) {
-        if let Some(tx) = queue.take() {
-            tx.send(value.into()).unwrap();
-        }
+        queue.pop_front().unwrap().send(value.into());
     }
 
     async fn visit(&mut self, node: RespNode) -> Result<String, RespError> {

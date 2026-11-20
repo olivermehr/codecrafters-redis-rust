@@ -51,7 +51,7 @@ impl RespServer {
 
                     if index == v.len() && block.is_some() {
                         let (tx, rx) = oneshot::channel();
-                        storage.queue.get_or_insert(tx);
+                        storage.queue.push_back(tx);
                         block_vec.push(rx);
                         stream_keys_vec.push(stream_key.clone());
                     } else if index < v.len() && block.is_some() {
@@ -87,16 +87,6 @@ impl RespServer {
 
                     },
                 _ = tokio::time::sleep(Duration::from_millis(millis as u64)) => {
-                    for key in stream_keys_vec {
-                        self.storage
-                            .lock()
-                            .unwrap()
-                            .get_mut(&key)
-                            .unwrap()
-                            .queue = None;
-
-
-                    }
 
                     return Ok(format_null_array())
 
@@ -107,9 +97,6 @@ impl RespServer {
                 let se = futures.next().await;
                 if let Some(Ok(StorageType::Stream(mut v))) = se {
                     let entry = v.remove(0);
-                    for key in stream_keys_vec {
-                        self.storage.lock().unwrap().get_mut(&key).unwrap().queue = None;
-                    }
                     return Ok(format_array(&[format_array(&[
                         format_bulk_string(entry.stream_key.clone()),
                         format_stream_entries(&[entry]),
