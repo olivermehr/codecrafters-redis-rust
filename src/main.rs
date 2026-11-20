@@ -143,7 +143,7 @@ impl RespServer {
             command_queue: None,
             expiry_tx: tx,
             triggered_watches: Arc::new(Mutex::new(HashMap::new())),
-            connection_no: SERVER_INDEX.load(atomic::Ordering::Relaxed) as usize,
+            connection_no: SERVER_INDEX.fetch_add(1, atomic::Ordering::Relaxed) as usize,
         }
     }
 
@@ -260,7 +260,6 @@ async fn main() {
         match listener.accept().await {
             Ok((mut stream, _)) => {
                 let mut cloned_server = server.clone();
-                println!("{}", cloned_server.connection_no);
                 tokio::spawn(async move {
                     let mut buf = [0; 1024];
                     let mut read_index = 0;
