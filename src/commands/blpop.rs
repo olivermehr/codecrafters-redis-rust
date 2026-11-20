@@ -25,7 +25,9 @@ impl RespServer {
                     .get_or_insert(tx);
 
                 if timeout == 0.0 {
-                    let value = rx.await.unwrap();
+                    let value = rx.await;
+                    println!("{value:?}");
+                    let value = value.unwrap();
                     Ok(format_array(&[
                         format_bulk_string(list_name),
                         format_bulk_string(value.into()),
