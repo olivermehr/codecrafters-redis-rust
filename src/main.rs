@@ -152,7 +152,9 @@ impl RespServer {
         queue: &mut VecDeque<tokio::sync::oneshot::Sender<StorageType>>,
         value: String,
     ) {
-        queue.pop_front().unwrap().send(value.into());
+        if let Some(sender) = queue.pop_front() {
+            sender.send(value.into()).unwrap();
+        }
     }
 
     async fn visit(&mut self, node: RespNode) -> Result<String, RespError> {
