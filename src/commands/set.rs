@@ -30,10 +30,8 @@ impl RespServer {
         let mut lock = self.storage.lock().unwrap();
         match lock.get_mut(&key) {
             Some(val) => {
-                println!("watch triggers set for {} :{:?}", key, val.watched);
                 val.content = crate::StorageType::String(value);
                 for i in val.watched.drain() {
-                    println!("watches stored {}", i);
                     self.triggered_watches.lock().unwrap().insert(i, true);
                 }
             }

@@ -7,7 +7,10 @@ use std::{
     fmt::Display,
     fs::read,
     ops::Add,
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{
+        Arc, Mutex, MutexGuard,
+        atomic::{self, AtomicU64},
+    },
     time::Duration,
 };
 
@@ -39,9 +42,9 @@ struct RespServer {
 
 impl Clone for RespServer {
     fn clone(&self) -> Self {
-        println!("connection no : {}",self.connection_no);
+        println!("connection no : {}", self.connection_no);
         Self {
-            connection_no: self.connection_no + 1,
+            connection_no: SERVER_INDEX.fetch_add(1, atomic::Ordering::Relaxed) as usize,
             command_queue: self.command_queue.clone(),
             triggered_watches: self.triggered_watches.clone(),
             expiry_tx: self.expiry_tx.clone(),
@@ -107,6 +110,7 @@ impl From<StorageType> for String {
 
 static EMPTY_ARRAY: &[String; 0] = &[];
 static NON_MULTI_COMMANDS: &[&str] = &["exec", "discard", "watch"];
+static SERVER_INDEX: atomic::AtomicU64 = AtomicU64::new(0);
 
 impl RespServer {
     fn new() -> Self {
@@ -138,7 +142,7 @@ impl RespServer {
             command_queue: None,
             expiry_tx: tx,
             triggered_watches: Arc::new(Mutex::new(HashMap::new())),
-            connection_no: 0,
+            connection_no: SERVER_INDEX.load(atomic::Ordering::Relaxed) as usize,
         }
     }
 
@@ -255,7 +259,7 @@ async fn main() {
         match listener.accept().await {
             Ok((mut stream, _)) => {
                 let mut cloned_server = server.clone();
-                println!("{}",cloned_server.connection_no);
+                println!("{}", cloned_server.connection_no);
                 tokio::spawn(async move {
                     let mut buf = [0; 1024];
                     let mut read_index = 0;
