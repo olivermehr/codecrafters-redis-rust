@@ -333,7 +333,6 @@ fn process_incoming_tcp_stream(
     println!("{s}");
     let mut parser = RespParser::new(s.chars().collect());
     let (bytes_used, tree) = parser.create_tree();
-    println!("{:?}", tree);
     if bytes_used >= buf.len() {
         buf.fill(0);
     } else {
