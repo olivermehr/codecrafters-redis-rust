@@ -1,6 +1,11 @@
 #![allow(unused_imports)]
 use clap::Parser;
 use core::error;
+use rand::{
+    RngExt,
+    distr::{Alphanumeric, StandardUniform},
+    rng,
+};
 use std::{
     array,
     borrow::Cow,
@@ -34,7 +39,10 @@ mod resp;
 
 #[derive(Debug, Clone)]
 enum ServerRole {
-    Master,
+    Master {
+        replid: String,
+        offset: usize,
+    },
     Slave {
         master_host: String,
         master_port: String,
@@ -44,11 +52,14 @@ enum ServerRole {
 impl Display for ServerRole {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Master => write!(f, "master"),
+            Self::Master { replid, offset } => write!(
+                f,
+                "role:master\nmaster_replid:{replid}\nmaster_repl_offset:{offset}\n"
+            ),
             Self::Slave {
                 master_host,
                 master_port,
-            } => write!(f, "slave"),
+            } => write!(f, "role:slave"),
         }
     }
 }
@@ -331,7 +342,8 @@ async fn main() {
             master_port: split.1.to_string(),
         }
     } else {
-        ServerRole::Master
+        let replid = String::from_utf8(rng().sample_iter(Alphanumeric).take(40).collect()).unwrap();
+        ServerRole::Master { replid, offset: 0 }
     };
 
     let server = RespServer::new(role);
