@@ -9,17 +9,14 @@ impl RespServer {
         while let Ok(k) = get_bulk_string_arg(v.next()) {
             keys.push(k);
         }
+
         match self.command_queue.lock().unwrap().get(&self.connection_no) {
             Some(Some(_)) => Ok(format_error_string("WATCH inside MULTI is not allowed")),
             _ => {
+                let mut watched_keys = self.watched_keys.lock().unwrap();
+                let watched_keys = watched_keys.entry(self.connection_no).or_insert(Vec::new());
                 for key in keys {
-                    self.storage
-                        .lock()
-                        .unwrap()
-                        .entry(key)
-                        .or_insert(Storage::new(StorageType::String(String::new())))
-                        .watched
-                        .insert(self.connection_no);
+                    watched_keys.push((key, false));
                 }
 
                 Ok(format_simple_string(String::from("OK")))

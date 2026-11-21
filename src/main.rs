@@ -36,7 +36,7 @@ mod resp;
 struct RespServer {
     connection_no: usize,
     command_queue: Arc<Mutex<HashMap<usize, Option<Vec<RespNode>>>>>,
-    triggered_watches: Arc<Mutex<HashMap<usize, bool>>>,
+    watched_keys: Arc<Mutex<HashMap<usize, Vec<(String, bool)>>>>,
     expiry_tx: Sender<Expiry>,
     storage: Arc<Mutex<HashMap<String, Storage>>>,
 }
@@ -48,7 +48,7 @@ impl Clone for RespServer {
         Self {
             connection_no: new_conn_no,
             command_queue: self.command_queue.clone(),
-            triggered_watches: self.triggered_watches.clone(),
+            watched_keys: self.watched_keys.clone(),
             expiry_tx: self.expiry_tx.clone(),
             storage: self.storage.clone(),
         }
@@ -118,7 +118,7 @@ impl From<StorageType> for String {
 }
 
 static EMPTY_ARRAY: &[String; 0] = &[];
-static NON_MULTI_COMMANDS: &[&str] = &["exec", "discard", "watch"];
+static NON_MULTI_COMMANDS: &[&str] = &["exec", "discard", "watch", "unwatch"];
 static SERVER_INDEX: atomic::AtomicU64 = AtomicU64::new(0);
 
 impl RespServer {
@@ -150,7 +150,7 @@ impl RespServer {
             storage,
             command_queue: Arc::new(Mutex::new(HashMap::new())),
             expiry_tx: tx,
-            triggered_watches: Arc::new(Mutex::new(HashMap::new())),
+            watched_keys: Arc::new(Mutex::new(HashMap::new())),
             connection_no: SERVER_INDEX.fetch_add(1, atomic::Ordering::Relaxed) as usize,
         }
     }
@@ -187,7 +187,7 @@ impl RespServer {
         Self {
             connection_no: self.connection_no,
             command_queue: self.command_queue.clone(),
-            triggered_watches: self.triggered_watches.clone(),
+            watched_keys: self.watched_keys.clone(),
             expiry_tx: self.expiry_tx.clone(),
             storage: self.storage.clone(),
         }

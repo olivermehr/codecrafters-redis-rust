@@ -1,5 +1,7 @@
 use super::{CommandArgs, Expiry, RespError, RespServer};
-use crate::{Storage, format_simple_string, get_bulk_string_arg, get_bulk_string_arg_optional};
+use crate::{
+    Storage, StorageType, format_simple_string, get_bulk_string_arg, get_bulk_string_arg_optional,
+};
 use tokio::sync::mpsc::Sender;
 
 impl RespServer {
@@ -30,15 +32,25 @@ impl RespServer {
         let mut lock = self.storage.lock().unwrap();
         match lock.get_mut(&key) {
             Some(val) => {
-                val.content = crate::StorageType::String(value);
-                for i in val.watched.drain() {
-                    self.triggered_watches.lock().unwrap().insert(i, true);
-                }
+                val.content = StorageType::String(value);
             }
             None => {
-                lock.insert(key, Storage::new(value.into()));
+                lock.insert(key.clone(), Storage::new(value.into()));
             }
         }
+        if let Some(watched_keys) = self
+            .watched_keys
+            .lock()
+            .unwrap()
+            .get_mut(&self.connection_no)
+        {
+            for (wk, status) in watched_keys {
+                if key == *wk {
+                    *status = true
+                }
+            }
+        }
+
         Ok(format_simple_string(String::from("OK")))
     }
 }

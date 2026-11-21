@@ -18,13 +18,16 @@ impl RespServer {
 
         if let Some(commands) = commands {
             if let Some(trigger) = self
-                .triggered_watches
+                .watched_keys
                 .lock()
                 .unwrap()
                 .get_mut(&self.connection_no)
             {
-                *trigger = false;
-                return Ok(format_null_array());
+                for (_, changed) in trigger.drain(..) {
+                    if changed {
+                        return Ok(format_null_array());
+                    }
+                }
             }
             if commands.is_empty() {
                 return Ok(format_array(&[]));
