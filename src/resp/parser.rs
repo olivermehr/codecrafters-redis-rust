@@ -138,6 +138,7 @@ impl RespParser {
         } else if char == '+' {
             self.advance();
             let s = self.simple_string()?;
+            println!("{s}");
             Ok(RespNode::SimpleString(s))
         } else {
             panic!("unsupported token {:?}", self.current_char)
