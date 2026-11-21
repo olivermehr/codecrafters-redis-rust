@@ -1,8 +1,9 @@
+use crate::CommandResponse;
 use super::{CommandArgs, RespError, RespServer};
 use crate::{StorageType, EMPTY_ARRAY, get_bulk_string_arg, format_array, format_stream_entries};
 
 impl RespServer {
-    pub(crate) async fn xrange(&mut self, mut v: CommandArgs) -> Result<String, RespError> {
+    pub(crate) async fn xrange(&mut self, mut v: CommandArgs) -> Result<CommandResponse, RespError> {
         let stream_key = get_bulk_string_arg(v.next())?;
         let mut start_index = get_bulk_string_arg(v.next())?;
         let mut stop_index = get_bulk_string_arg(v.next())?;
@@ -49,8 +50,8 @@ impl RespServer {
             let stop_index = v
                 .binary_search_by_key(&stop_index.as_str(), |entry| entry.id.as_str())
                 .unwrap();
-            return Ok(format_stream_entries(&v[start_index..=stop_index]));
+            return Ok(CommandResponse::Single(format_stream_entries(&v[start_index..=stop_index])));
         }
-        Ok(format_array(EMPTY_ARRAY))
+        Ok(CommandResponse::Single(format_array(EMPTY_ARRAY)))
     }
 }

@@ -1,3 +1,4 @@
+use crate::CommandResponse;
 use std::collections::HashSet;
 
 use crate::{
@@ -6,14 +7,14 @@ use crate::{
 };
 
 impl RespServer {
-    pub async fn watch(&mut self, mut v: CommandArgs) -> Result<String, RespError> {
+    pub async fn watch(&mut self, mut v: CommandArgs) -> Result<CommandResponse, RespError> {
         let mut keys = Vec::new();
         while let Ok(k) = get_bulk_string_arg(v.next()) {
             keys.push(k);
         }
 
         match self.command_queue.lock().unwrap().get(&self.connection_no) {
-            Some(Some(_)) => Ok(format_error_string("WATCH inside MULTI is not allowed")),
+            Some(Some(_)) => Ok(CommandResponse::Single(format_error_string("WATCH inside MULTI is not allowed"))),
             _ => {
                 let mut watched_keys = self.watched_keys.lock().unwrap();
                 let watched_keys = watched_keys.entry(self.connection_no).or_insert(Vec::new());
@@ -21,7 +22,7 @@ impl RespServer {
                     watched_keys.push((key, false));
                 }
 
-                Ok(format_simple_string(String::from("OK")))
+                Ok(CommandResponse::Single(format_simple_string(String::from("OK"))))
             }
         }
     }

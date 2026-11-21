@@ -152,6 +152,12 @@ impl From<StorageType> for String {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum CommandResponse {
+    Single(String),
+    Multi(Vec<String>),
+}
+
 static EMPTY_ARRAY: &[String; 0] = &[];
 static NON_MULTI_COMMANDS: &[&str] = &["exec", "discard", "watch", "unwatch"];
 static SERVER_INDEX: atomic::AtomicU64 = AtomicU64::new(0);
@@ -190,7 +196,7 @@ impl RespServer {
             connection_no: SERVER_INDEX.fetch_add(1, atomic::Ordering::Relaxed) as usize,
         }
     }
-    async fn visit(&mut self, node: RespNode) -> Result<String, RespError> {
+    async fn visit(&mut self, node: RespNode) -> Result<CommandResponse, RespError> {
         if let RespNode::Array(v) = &node
             && let Some(Some(command_vec)) = &mut self
                 .command_queue
@@ -201,7 +207,9 @@ impl RespServer {
             && !NON_MULTI_COMMANDS.contains(&s.as_str())
         {
             command_vec.push(node);
-            Ok(format_simple_string(String::from("QUEUED")))
+            Ok(CommandResponse::Single(format_simple_string(String::from(
+                "QUEUED",
+            ))))
         } else if let RespNode::Array(v) = node {
             let mut args = v.into_iter();
             let fn_name = get_bulk_string_arg(args.next())?;
@@ -443,7 +451,15 @@ async fn main() {
                                 tokio::select! {
                                             res = command_clone_server.visit(command) =>  {
                                                 match res {
-                                                                  Ok(s) => stream_write.write_all(s.as_bytes()).await.unwrap(),
+                                                                  Ok(response) => match response {
+                                                                    CommandResponse::Single(s) => stream_write.write_all(s.as_bytes()).await.unwrap(),
+                                                                    CommandResponse::Multi(v) => {
+                                                                        for res in v {
+                                                                            stream_write.write_all(res.as_bytes()).await.unwrap()
+                                                                        }
+                                                                    }
+
+                                                                }
                                     Err(e) => {
                                         let error = match e {
                                             RespError::Empty => format_error_string("no arguments"),

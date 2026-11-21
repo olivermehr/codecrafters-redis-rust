@@ -4,7 +4,7 @@ use futures::future::BoxFuture;
 use tokio::sync::mpsc::Sender;
 
 use crate::{
-    Expiry, RespServer,
+    CommandResponse, Expiry, RespServer,
     resp::{error::RespError, parser::RespNode},
 };
 
@@ -33,8 +33,10 @@ mod xrange;
 mod xread;
 
 type CommandArgs = IntoIter<RespNode>;
-type CommandFn =
-    for<'a> fn(&'a mut RespServer, CommandArgs) -> BoxFuture<'a, Result<String, RespError>>;
+type CommandFn = for<'a> fn(
+    &'a mut RespServer,
+    CommandArgs,
+) -> BoxFuture<'a, Result<CommandResponse, RespError>>;
 
 pub(crate) static COMMANDS: LazyLock<HashMap<&'static str, CommandFn>> = LazyLock::new(|| {
     let commands: [(&'static str, CommandFn); 23] = [

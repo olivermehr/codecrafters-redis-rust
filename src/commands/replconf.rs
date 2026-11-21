@@ -1,3 +1,4 @@
+use crate::CommandResponse;
 use std::collections::HashSet;
 
 use crate::{
@@ -6,7 +7,7 @@ use crate::{
 };
 
 impl RespServer {
-    pub async fn replconf(&mut self, mut v: CommandArgs) -> Result<String, RespError> {
-        Ok(format_simple_string(String::from("OK")))
+    pub async fn replconf(&mut self, mut v: CommandArgs) -> Result<CommandResponse, RespError> {
+        Ok(CommandResponse::Single(format_simple_string(String::from("OK"))))
     }
 }

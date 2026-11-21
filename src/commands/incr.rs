@@ -1,10 +1,11 @@
+use crate::CommandResponse;
 use crate::{
     RespServer, Storage, StorageType, commands::CommandArgs, format_error_string,
     format_integer_string, get_bulk_string_arg, resp::error::RespError,
 };
 
 impl RespServer {
-    pub async fn incr(&mut self, mut v: CommandArgs) -> Result<String, RespError> {
+    pub async fn incr(&mut self, mut v: CommandArgs) -> Result<CommandResponse, RespError> {
         let key_name = get_bulk_string_arg(v.next())?;
         let mut lock = self.storage.lock().unwrap();
 
@@ -16,12 +17,12 @@ impl RespServer {
                         Ok(mut n) => {
                             n += 1;
                             *s = n.to_string();
-                            return Ok(format_integer_string(n as isize));
+                            return Ok(CommandResponse::Single(format_integer_string(n as isize)));
                         }
                         Err(e) => {
-                            return Ok(format_error_string(
+                            return Ok(CommandResponse::Single(format_error_string(
                                 "value is not an integer or out of range",
-                            ));
+                            )));
                         }
                     }
                 }
@@ -29,7 +30,7 @@ impl RespServer {
             }
             None => {
                 lock.insert(key_name, Storage::new(StorageType::String(1.to_string())));
-                Ok(format_integer_string(1))
+                Ok(CommandResponse::Single(format_integer_string(1)))
             }
         }
     }

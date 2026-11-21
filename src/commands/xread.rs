@@ -1,3 +1,4 @@
+use crate::CommandResponse;
 use super::{CommandArgs, RespError, RespServer};
 use crate::{
     StorageType, format_array, format_bulk_string, format_null_array, format_stream_entries,
@@ -8,7 +9,7 @@ use std::time::Duration;
 use tokio::sync::oneshot;
 
 impl RespServer {
-    pub(crate) async fn xread(&mut self, mut v: CommandArgs) -> Result<String, RespError> {
+    pub(crate) async fn xread(&mut self, mut v: CommandArgs) -> Result<CommandResponse, RespError> {
         let mut param_vec = Vec::new();
         while let Ok(p) = get_bulk_string_arg(v.next()) {
             param_vec.push(p)
@@ -55,10 +56,10 @@ impl RespServer {
                         block_vec.push(rx);
                         stream_keys_vec.push(stream_key.clone());
                     } else if index < v.len() && block.is_some() {
-                        return Ok(format_array(&[
+                        return Ok(CommandResponse::Single(format_array(&[
                             format_bulk_string(stream_key.clone()),
                             format_stream_entries(&v[index..]),
-                        ]));
+                        ])));
                     } else {
                         stream_vec.push(format_array(&[
                             format_bulk_string(stream_key.clone()),
@@ -78,17 +79,17 @@ impl RespServer {
                 se = futures.next() => {
                     if let Some(Ok(StorageType::Stream(mut v))) = se {
                         let entry = v.remove(0);
-                        return Ok(format_array(&[format_array(&[
+                        return Ok(CommandResponse::Single(format_array(&[format_array(&[
                         format_bulk_string(entry.stream_key.clone()),
                         format_stream_entries(&[entry]),
-                    ])]));
+                    ])])));
 
                     }
 
                     },
                 _ = tokio::time::sleep(Duration::from_millis(millis as u64)) => {
 
-                    return Ok(format_null_array())
+                    return Ok(CommandResponse::Single(format_null_array()))
 
                 }
 
@@ -97,13 +98,13 @@ impl RespServer {
                 let se = futures.next().await;
                 if let Some(Ok(StorageType::Stream(mut v))) = se {
                     let entry = v.remove(0);
-                    return Ok(format_array(&[format_array(&[
+                    return Ok(CommandResponse::Single(format_array(&[format_array(&[
                         format_bulk_string(entry.stream_key.clone()),
                         format_stream_entries(&[entry]),
-                    ])]));
+                    ])])));
                 }
             }
         }
-        Ok(format_array(&stream_vec))
+        Ok(CommandResponse::Single(format_array(&stream_vec)))
     }
 }
