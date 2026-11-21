@@ -12,6 +12,14 @@ impl RespServer {
             .get_mut(&self.connection_no)
             && let Some(c) = queue.take()
         {
+            if let Some(wk) = self
+                .watched_keys
+                .lock()
+                .unwrap()
+                .get_mut(&self.connection_no)
+            {
+                wk.clear();
+            }
             return Ok(format_simple_string(String::from("OK")));
         }
         Ok(format_error_string("DISCARD without MULTI"))
