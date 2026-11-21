@@ -140,7 +140,7 @@ impl RespParser {
             println!("made it into simple string branch");
             self.advance();
             let s = self.simple_string()?;
-            println!("{}")
+            println!("{s}");
             self.crlf()?;
             Ok(RespNode::SimpleString(s))
         } else {
