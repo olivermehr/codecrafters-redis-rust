@@ -1,4 +1,5 @@
 #![allow(unused_imports)]
+use clap::Parser;
 use core::error;
 use std::{
     array,
@@ -277,9 +278,22 @@ struct Expiry {
     millis: u64,
 }
 
+#[derive(Debug, Parser)]
+struct CommandLine {
+    port: Option<usize>,
+}
+
 #[tokio::main]
 async fn main() {
-    let listener = TcpListener::bind("127.0.0.1:6379").await.unwrap();
+    let cli = CommandLine::parse();
+
+    let listener = if let Some(port) = cli.port {
+        TcpListener::bind(format!("127.0.0.1:{}", port))
+            .await
+            .unwrap()
+    } else {
+        TcpListener::bind("127.0.0.1:6379").await.unwrap()
+    };
     let server = RespServer::new();
 
     loop {
