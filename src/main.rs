@@ -334,12 +334,21 @@ async fn main() {
         TcpListener::bind("127.0.0.1:6379").await.unwrap()
     };
     let role = if let Some(replica) = cli.replicaof {
-        let split = replica
+        let (host, port) = replica
             .split_once(' ')
             .expect("incorrect replica info format");
+        let socket = TcpSocket::new_v4().unwrap();
+        let mut stream = socket
+            .connect(format!("{host}:{port}").parse().unwrap())
+            .await
+            .unwrap();
+        stream
+            .write_all(&format_array(&[format_bulk_string(String::from("PING"))]).into_bytes())
+            .await
+            .unwrap();
         ServerRole::Slave {
-            master_host: split.0.to_string(),
-            master_port: split.1.to_string(),
+            master_host: host.to_string(),
+            master_port: port.to_string(),
         }
     } else {
         let replid = String::from_utf8(rng().sample_iter(Alphanumeric).take(40).collect()).unwrap();
