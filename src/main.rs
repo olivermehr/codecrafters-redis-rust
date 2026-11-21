@@ -399,9 +399,6 @@ async fn main() {
             for node in tree {
                 if let RespNode::SimpleString(s) = node {
                     if s == "pong" || s == "ok" {
-                        if replication_init.is_empty() {
-                            break;
-                        }
                         stream
                             .write_all(&replication_init.pop_front().unwrap().into_bytes())
                             .await;
@@ -409,6 +406,9 @@ async fn main() {
                 } else {
                     panic!("unrecognised replication init reponse")
                 }
+            }
+            if replication_init.is_empty() {
+                break;
             }
         }
 
