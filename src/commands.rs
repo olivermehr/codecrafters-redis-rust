@@ -21,6 +21,7 @@ mod lpush;
 mod lrange;
 mod multi;
 mod ping;
+mod replconf;
 mod rpush;
 mod set;
 mod r#type;
@@ -56,7 +57,7 @@ pub(crate) static COMMANDS: LazyLock<HashMap<&'static str, CommandFn>> = LazyLoc
         ("discard", |server, args| Box::pin(server.discard())),
         ("watch", |server, args| Box::pin(server.watch(args))),
         ("unwatch", |server, args| Box::pin(server.unwatch())),
-        ("info", |server, args| Box::pin(server.info(args))),
+        ("replconf", |server, args| Box::pin(server.replconf(args))),
     ];
     HashMap::from(commands)
 });
