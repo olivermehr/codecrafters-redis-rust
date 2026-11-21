@@ -330,7 +330,6 @@ fn process_incoming_tcp_stream(
     let s = String::from_utf8_lossy(&buf[..*read_index + bytes_read])
         .into_owned()
         .to_lowercase();
-    println!("{s}");
     let mut parser = RespParser::new(s.chars().collect());
     let (bytes_used, tree) = parser.create_tree();
     if bytes_used >= buf.len() {
@@ -406,9 +405,6 @@ async fn main() {
                 } else {
                     panic!("unrecognised replication init reponse")
                 }
-            }
-            if replication_init.is_empty() {
-                break;
             }
         }
 
