@@ -236,7 +236,7 @@ impl RespServer {
         value: String,
     ) {
         if let Some(sender) = queue.pop_front() {
-            sender.send(value.into()).unwrap();
+            sender.send(value.into());
         }
     }
 
