@@ -404,9 +404,9 @@ async fn main() {
             let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
             for node in tree {
                 if let RespNode::SimpleString(s) = node {
-                    if s == "pong" || s == "ok" && replication_init.is_empty() {
+                    if s == "ok" && replication_init.is_empty() {
                         break 'read_loop;
-                    } else {
+                    } else if s == "ok" || s == "pong" {
                         stream
                             .write_all(&replication_init.pop_front().unwrap().into_bytes())
                             .await;
