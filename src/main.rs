@@ -280,6 +280,7 @@ struct Expiry {
 
 #[derive(Debug, Parser)]
 struct CommandLine {
+    #[arg(short,long)]
     port: Option<usize>,
 }
 
