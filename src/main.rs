@@ -382,6 +382,10 @@ async fn main() {
                 format_bulk_string(String::from("capa")),
                 format_bulk_string(String::from("psync2")),
             ]),
+            format_array(&[
+                format_bulk_string(String::from("?")),
+                format_bulk_string((-1).to_string()),
+            ]),
         ]);
         let mut stream = socket
             .connect(format!("{host}:{port}").parse().unwrap())
@@ -393,21 +397,26 @@ async fn main() {
             .unwrap();
         let mut buf = [0; 1024];
         let mut read_index = 0;
-        while let Ok(bytes) = stream.read(&mut buf).await {
+        'read_loop: while let Ok(bytes) = stream.read(&mut buf).await
+            && bytes > 0
+        {
             let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
             for node in tree {
                 if let RespNode::SimpleString(s) = node {
                     if s == "pong" || s == "ok" {
-                        stream
-                            .write_all(&replication_init.pop_front().unwrap().into_bytes())
-                            .await;
+                        if replication_init.is_empty() {
+                            break 'read_loop;
+                        } else {
+                            stream
+                                .write_all(&replication_init.pop_front().unwrap().into_bytes())
+                                .await;
+                        }
+                    } else {
+                        panic!("unrecognised replication init reponse");
                     }
-                } else {
-                    panic!("unrecognised replication init reponse")
                 }
             }
         }
-
         ServerRole::Slave {
             master_host: host.to_string(),
             master_port: port.to_string(),
@@ -465,7 +474,9 @@ async fn main() {
                             }
                         }
                     });
-                    while let Ok(bytes) = stream_read.read(&mut buf[read_index..]).await {
+                    while let Ok(bytes) = stream_read.read(&mut buf[read_index..]).await
+                        && bytes > 0
+                    {
                         let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
 
                         for node in tree.into_iter() {
