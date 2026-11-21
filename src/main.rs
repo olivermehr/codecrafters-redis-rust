@@ -322,6 +322,33 @@ struct CommandLine {
     replicaof: Option<String>,
 }
 
+fn process_incoming_tcp_stream(
+    buf: &mut [u8; 1024],
+    read_index: &mut usize,
+    bytes_read: usize,
+) -> Vec<RespNode> {
+    let s = String::from_utf8_lossy(&buf[..*read_index + bytes_read])
+        .into_owned()
+        .to_lowercase();
+    let mut parser = RespParser::new(s.chars().collect());
+    let (bytes_used, tree) = parser.create_tree();
+    if bytes_used >= buf.len() {
+        buf.fill(0);
+    } else {
+        if bytes_used == 0 {
+            *read_index = bytes_read;
+        } else {
+            *read_index = 0;
+            buf.copy_within(bytes_used.., 0);
+            let remaining = buf.len() - bytes_used;
+            for i in buf[remaining..].iter_mut() {
+                *i = 0;
+            }
+        }
+    }
+    tree
+}
+
 #[tokio::main]
 async fn main() {
     let cli = CommandLine::parse();
@@ -343,14 +370,47 @@ async fn main() {
         } else {
             host
         };
+        let mut replication_init = VecDeque::from([
+            format_bulk_string(String::from("PING")),
+            format_array(&[
+                format_bulk_string(String::from("REPLCONF")),
+                format_bulk_string(String::from("listening-port")),
+                format_bulk_string(listener.local_addr().unwrap().port().to_string()),
+            ]),
+            format_array(&[
+                format_bulk_string(String::from("REPLCONF")),
+                format_bulk_string(String::from("capa")),
+                format_bulk_string(String::from("psync2")),
+            ]),
+        ]);
         let mut stream = socket
             .connect(format!("{host}:{port}").parse().unwrap())
             .await
             .unwrap();
         stream
-            .write_all(&format_array(&[format_bulk_string(String::from("PING"))]).into_bytes())
+            .write_all(&replication_init.pop_front().unwrap().into_bytes())
             .await
             .unwrap();
+        let mut buf = [0; 1024];
+        let mut read_index = 0;
+        while let Ok(bytes) = stream.read(&mut buf).await {
+            let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
+            for node in tree {
+                if let RespNode::SimpleString(s) = node {
+                    if s == "pong" || s == "ok" {
+                        if replication_init.is_empty() {
+                            break;
+                        }
+                        stream
+                            .write_all(&replication_init.pop_front().unwrap().into_bytes())
+                            .await;
+                    }
+                } else {
+                    panic!("unrecognised replication init reponse")
+                }
+            }
+        }
+
         ServerRole::Slave {
             master_host: host.to_string(),
             master_port: port.to_string(),
@@ -409,25 +469,8 @@ async fn main() {
                         }
                     });
                     while let Ok(bytes) = stream_read.read(&mut buf[read_index..]).await {
-                        let s = String::from_utf8_lossy(&buf[..read_index + bytes])
-                            .into_owned()
-                            .to_lowercase();
-                        let mut parser = RespParser::new(s.chars().collect());
-                        let (bytes_used, tree) = parser.create_tree();
-                        if bytes_used >= buf.len() {
-                            buf.fill(0);
-                        } else {
-                            if bytes_used == 0 {
-                                read_index = bytes;
-                            } else {
-                                read_index = 0;
-                                buf.copy_within(bytes_used.., 0);
-                                let remaining = buf.len() - bytes_used;
-                                for i in buf[remaining..].iter_mut() {
-                                    *i = 0;
-                                }
-                            }
-                        }
+                        let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
+
                         for node in tree.into_iter() {
                             command_tx.send(node).await;
                         }
