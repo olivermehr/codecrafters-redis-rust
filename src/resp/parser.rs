@@ -136,6 +136,7 @@ impl RespParser {
             let int = self.integer()?;
             Ok(RespNode::Integer(int as isize))
         } else if char == '+' {
+            println!("made it into simple string branch");
             self.advance();
             let s = self.simple_string()?;
             self.crlf()?;
