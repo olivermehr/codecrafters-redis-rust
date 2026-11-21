@@ -383,6 +383,7 @@ async fn main() {
                 format_bulk_string(String::from("psync2")),
             ]),
             format_array(&[
+                format_bulk_string(String::from("PSYNC")),
                 format_bulk_string(String::from("?")),
                 format_bulk_string((-1).to_string()),
             ]),
