@@ -338,6 +338,7 @@ async fn main() {
             .split_once(' ')
             .expect("incorrect replica info format");
         let socket = TcpSocket::new_v4().unwrap();
+        println!("{host},{port}");
         let mut stream = socket
             .connect(format!("{host}:{port}").parse().unwrap())
             .await
