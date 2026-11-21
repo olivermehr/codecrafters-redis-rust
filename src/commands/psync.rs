@@ -27,7 +27,7 @@ impl RespServer {
                 })
                 .collect();
 
-            let rbd_message = format!("${}\r\n{}", 127157, rdb_file_bytes);
+            let rbd_message = format!("${}\r\n{}", rdb_file_bytes.len(), rdb_file_bytes);
             return Ok(CommandResponse::Multi(vec![
                 format_simple_string(format!("FULLRESYNC {} {}", replid, 0)),
                 rbd_message,
