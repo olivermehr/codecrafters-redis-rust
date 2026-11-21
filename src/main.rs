@@ -396,7 +396,6 @@ async fn main() {
         let mut read_index = 0;
         while let Ok(bytes) = stream.read(&mut buf).await {
             let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
-            println!("{:?}",tree);
             for node in tree {
                 if let RespNode::SimpleString(s) = node {
                     if s == "pong" || s == "ok" {

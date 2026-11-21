@@ -140,8 +140,8 @@ impl RespParser {
             println!("made it into simple string branch");
             self.advance();
             let s = self.simple_string()?;
+            println!("{}")
             self.crlf()?;
-            println!("{s}");
             Ok(RespNode::SimpleString(s))
         } else {
             panic!("unsupported token {:?}", self.current_char)
