@@ -43,6 +43,18 @@ impl RespParser {
         None
     }
 
+    fn simple_string(&mut self) -> Result<String, RespError> {
+        let mut s = String::new();
+        while let Some(char) = self.current_char {
+            if char == '\r' {
+                return Ok(s);
+            } else {
+                s.push(char);
+            }
+        }
+        Err(RespError::IncompleteTcpStream)
+    }
+
     fn integer(&mut self) -> Result<i32, RespError> {
         let mut num = String::new();
         while let Some(char) = self.current_char {
@@ -123,6 +135,10 @@ impl RespParser {
             self.advance();
             let int = self.integer()?;
             Ok(RespNode::Integer(int as isize))
+        } else if char == '+' {
+            self.advance();
+            let s = self.simple_string()?;
+            Ok(RespNode::SimpleString(s))
         } else {
             panic!("unsupported token {:?}", self.current_char)
         }
