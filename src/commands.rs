@@ -49,9 +49,9 @@ pub(crate) static COMMANDS: LazyLock<HashMap<&'static str, CommandFn>> = LazyLoc
         ("xrange", |server, args| Box::pin(server.xrange(args))),
         ("xread", |server, args| Box::pin(server.xread(args))),
         ("incr", |server, args| Box::pin(server.incr(args))),
-        ("multi", |server, args| Box::pin(server.multi(args))),
-        ("exec", |server, args| Box::pin(server.exec(args))),
-        ("discard", |server, args| Box::pin(server.discard(args))),
+        ("multi", |server, args| Box::pin(server.multi())),
+        ("exec", |server, args| Box::pin(server.exec())),
+        ("discard", |server, args| Box::pin(server.discard())),
         ("watch", |server, args| Box::pin(server.watch(args))),
     ];
     HashMap::from(commands)

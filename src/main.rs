@@ -20,7 +20,7 @@ use tokio::{
     net::{TcpListener, TcpSocket},
     sync::{
         mpsc::{self, Receiver, Sender},
-        oneshot,
+        oneshot, watch,
     },
 };
 
@@ -31,10 +31,11 @@ use crate::resp::{
 mod commands;
 mod resp;
 
+// Server impl as the foundation of each connection
 #[derive(Debug)]
 struct RespServer {
     connection_no: usize,
-    command_queue: Option<Vec<RespNode>>,
+    command_queue: Arc<Mutex<HashMap<usize, Option<Vec<RespNode>>>>>,
     triggered_watches: Arc<Mutex<HashMap<usize, bool>>>,
     expiry_tx: Sender<Expiry>,
     storage: Arc<Mutex<HashMap<String, Storage>>>,
@@ -51,6 +52,13 @@ impl Clone for RespServer {
             expiry_tx: self.expiry_tx.clone(),
             storage: self.storage.clone(),
         }
+    }
+}
+
+impl Drop for RespServer {
+    fn drop(&mut self) {
+        println!("Dropping connection {}", self.connection_no);
+        SERVER_INDEX.fetch_sub(1, atomic::Ordering::Relaxed);
     }
 }
 
@@ -140,26 +148,19 @@ impl RespServer {
         });
         Self {
             storage,
-            command_queue: None,
+            command_queue: Arc::new(Mutex::new(HashMap::new())),
             expiry_tx: tx,
             triggered_watches: Arc::new(Mutex::new(HashMap::new())),
             connection_no: SERVER_INDEX.fetch_add(1, atomic::Ordering::Relaxed) as usize,
         }
     }
-
-    fn handle_bl_pop(
-        &self,
-        queue: &mut VecDeque<tokio::sync::oneshot::Sender<StorageType>>,
-        value: String,
-    ) {
-        if let Some(sender) = queue.pop_front() {
-            sender.send(value.into()).unwrap();
-        }
-    }
-
     async fn visit(&mut self, node: RespNode) -> Result<String, RespError> {
         if let RespNode::Array(v) = &node
-            && let Some(command_vec) = &mut self.command_queue
+            && let Some(Some(command_vec)) = &mut self
+                .command_queue
+                .lock()
+                .unwrap()
+                .get_mut(&self.connection_no)
             && let Some(RespNode::BulkString(s)) = v.first()
             && !NON_MULTI_COMMANDS.contains(&s.as_str())
         {
@@ -174,6 +175,31 @@ impl RespServer {
             command(self, args).await
         } else {
             Err(RespError::InvalidSyntax)
+        }
+    }
+
+    // Clone per connection (increments conn number)
+    fn clone_for_conn(&self) -> Self {
+        self.clone()
+    }
+    // clone per command does increment conn number
+    fn clone_for_comm(&self) -> Self {
+        Self {
+            connection_no: self.connection_no,
+            command_queue: self.command_queue.clone(),
+            triggered_watches: self.triggered_watches.clone(),
+            expiry_tx: self.expiry_tx.clone(),
+            storage: self.storage.clone(),
+        }
+    }
+
+    fn handle_bl_pop(
+        &self,
+        queue: &mut VecDeque<tokio::sync::oneshot::Sender<StorageType>>,
+        value: String,
+    ) {
+        if let Some(sender) = queue.pop_front() {
+            sender.send(value.into()).unwrap();
         }
     }
 
@@ -258,14 +284,51 @@ async fn main() {
 
     loop {
         match listener.accept().await {
-            Ok((mut stream, _)) => {
-                let mut cloned_server = server.clone();
+            Ok((stream, _)) => {
+                let cloned_server = server.clone_for_conn();
                 tokio::spawn(async move {
                     let mut buf = [0; 1024];
                     let mut read_index = 0;
-                    while let Ok(bytes) = stream.read(&mut buf[read_index..]).await
-                        && bytes != 0
-                    {
+                    let (tx, rx) = watch::channel(());
+                    let (command_tx, mut command_rx) = mpsc::channel(100);
+                    let (mut stream_read, mut stream_write) = stream.into_split();
+                    tokio::spawn({
+                        let mut command_clone_server = cloned_server.clone_for_comm();
+                        let mut kill_switch = rx.clone();
+                        async move {
+                            while let Some(command) = command_rx.recv().await {
+                                tokio::select! {
+                                            res = command_clone_server.visit(command) =>  {
+                                                match res {
+                                                                  Ok(s) => stream_write.write_all(s.as_bytes()).await.unwrap(),
+                                    Err(e) => {
+                                        let error = match e {
+                                            RespError::Empty => format_error_string("no arguments"),
+                                            RespError::IncorrectParams => {
+                                                format_error_string("invalid params")
+                                            }
+                                            RespError::InvalidSyntax => {
+                                                format_error_string("invalid syntax")
+                                            }
+                                            RespError::IncompleteTcpStream => {
+                                                format_error_string("incomplete tcp stream")
+                                            }
+                                            RespError::TcpStreamDropped => {
+                                                format_error_string("tcp stream dropped")
+                                            }
+                                        };
+                                        if error != "tcp stream dropped" {
+                                            stream_write.write_all(error.as_bytes()).await.unwrap()
+                                        }
+                                    }
+                                }
+                                                }
+                                            _ = kill_switch.changed() => {break}
+                                        }
+                            }
+                        }
+                    });
+                    while let Ok(bytes) = stream_read.read(&mut buf[read_index..]).await {
                         let s = String::from_utf8_lossy(&buf[..read_index + bytes])
                             .into_owned()
                             .to_lowercase();
@@ -286,28 +349,10 @@ async fn main() {
                             }
                         }
                         for node in tree.into_iter() {
-                            match cloned_server.visit(node).await {
-                                Ok(s) => {
-                                    stream.write_all(s.as_bytes()).await.unwrap();
-                                }
-                                Err(e) => {
-                                    let error = match e {
-                                        RespError::Empty => format_error_string("no arguments"),
-                                        RespError::IncorrectParams => {
-                                            format_error_string("invalid params")
-                                        }
-                                        RespError::InvalidSyntax => {
-                                            format_error_string("invalid syntax")
-                                        }
-                                        RespError::IncompleteTcpStream => {
-                                            format_error_string("incomplete tcp stream")
-                                        }
-                                    };
-                                    stream.write_all(error.as_bytes()).await.unwrap()
-                                }
-                            }
+                            command_tx.send(node).await;
                         }
                     }
+                    tx.send(())
                 });
             }
             Err(e) => {
@@ -316,8 +361,6 @@ async fn main() {
         }
     }
 }
-
-struct BulkString(String);
 
 fn format_simple_string(mut s: String) -> String {
     s.insert(0, '+');

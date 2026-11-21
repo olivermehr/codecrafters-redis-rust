@@ -4,10 +4,16 @@ use crate::{
 };
 
 impl RespServer {
-    pub async fn discard(&mut self, mut v: CommandArgs) -> Result<String, RespError> {
-        match self.command_queue.take() {
-            Some(_) => Ok(format_simple_string(String::from("OK"))),
-            None => Ok(format_error_string("DISCARD without MULTI")),
+    pub async fn discard(&mut self) -> Result<String, RespError> {
+        if let Some(queue) = self
+            .command_queue
+            .lock()
+            .unwrap()
+            .get_mut(&self.connection_no)
+            && let Some(c) = queue.take()
+        {
+            return Ok(format_simple_string(String::from("OK")));
         }
+        Ok(format_error_string("DISCARD without MULTI"))
     }
 }

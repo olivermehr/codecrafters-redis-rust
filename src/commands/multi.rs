@@ -4,8 +4,11 @@ use crate::{
 };
 
 impl RespServer {
-    pub async fn multi(&mut self, mut v: CommandArgs) -> Result<String, RespError> {
-        self.command_queue.replace(Vec::new());
+    pub async fn multi(&mut self) -> Result<String, RespError> {
+        self.command_queue
+            .lock()
+            .unwrap()
+            .insert(self.connection_no, Some(Vec::new()));
         Ok(format_simple_string(String::from("OK")))
     }
 }

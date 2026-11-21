@@ -5,28 +5,36 @@ use crate::{
 };
 
 impl RespServer {
-    pub async fn exec(&mut self, mut v: CommandArgs) -> Result<String, RespError> {
-        match self.command_queue.take() {
-            Some(commands) => {
-                if let Some(trigger) = self
-                    .triggered_watches
-                    .lock()
-                    .unwrap()
-                    .get_mut(&self.connection_no)
-                {
-                    *trigger = false;
-                    return Ok(format_null_array());
-                }
-                if commands.is_empty() {
-                    return Ok(format_array(&[]));
-                }
-                let mut response_vec = Vec::new();
-                for node in commands {
-                    response_vec.push(self.visit(node).await?)
-                }
-                Ok(format_array(&response_vec))
-            }
-            None => Ok(format_error_string("EXEC without MULTI")),
+    pub async fn exec(&mut self) -> Result<String, RespError> {
+        let commands;
+        {
+            // scope used to drop lock to not hold the mutable ref so we can call visit()
+            let mut lock = self.command_queue.lock().unwrap();
+            commands = match lock.get_mut(&self.connection_no) {
+                Some(c) => c.take(),
+                None => return Ok(format_error_string("EXEC without MULTI")),
+            };
         }
+
+        if let Some(commands) = commands {
+            if let Some(trigger) = self
+                .triggered_watches
+                .lock()
+                .unwrap()
+                .get_mut(&self.connection_no)
+            {
+                *trigger = false;
+                return Ok(format_null_array());
+            }
+            if commands.is_empty() {
+                return Ok(format_array(&[]));
+            }
+            let mut response_vec = Vec::new();
+            for node in commands {
+                response_vec.push(self.visit(node).await?)
+            }
+            return Ok(format_array(&response_vec));
+        }
+        Ok(format_error_string("EXEC without MULTI"))
     }
 }

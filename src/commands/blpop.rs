@@ -23,7 +23,6 @@ impl RespServer {
                     .unwrap()
                     .queue
                     .push_back(tx);
-
                 if timeout == 0.0 {
                     let value = rx.await.unwrap();
                     Ok(format_array(&[

@@ -6,17 +6,19 @@ use crate::{
 impl RespServer {
     pub async fn watch(&mut self, mut v: CommandArgs) -> Result<String, RespError> {
         let key_name = get_bulk_string_arg(v.next())?;
-        if self.command_queue.is_none() {
-            self.storage
-                .lock()
-                .unwrap()
-                .entry(key_name)
-                .or_insert(Storage::new(StorageType::String(String::new())))
-                .watched
-                .insert(self.connection_no);
-            Ok(format_simple_string(String::from("OK")))
-        } else {
-            Ok(format_error_string("WATCH inside MULTI is not allowed"))
+        match self.command_queue.lock().unwrap().get(&self.connection_no) {
+            Some(Some(_)) => Ok(format_error_string("WATCH inside MULTI is not allowed")),
+            _ => {
+                self.storage
+                    .lock()
+                    .unwrap()
+                    .entry(key_name)
+                    .or_insert(Storage::new(StorageType::String(String::new())))
+                    .watched
+                    .insert(self.connection_no);
+
+                Ok(format_simple_string(String::from("OK")))
+            }
         }
     }
 }
