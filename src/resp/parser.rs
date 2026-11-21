@@ -50,6 +50,7 @@ impl RespParser {
                 return Ok(s);
             } else {
                 s.push(char);
+                self.advance();
             }
         }
         Err(RespError::IncompleteTcpStream)
