@@ -38,15 +38,10 @@ impl RespServer {
                 lock.insert(key.clone(), Storage::new(value.into()));
             }
         }
-        if let Some(watched_keys) = self
-            .watched_keys
-            .lock()
-            .unwrap()
-            .get_mut(&self.connection_no)
-        {
-            for (wk, status) in watched_keys {
-                if key == *wk {
-                    *status = true
+        for all_watched_keys in self.watched_keys.lock().unwrap().values_mut() {
+            for (wk, status) in all_watched_keys.iter_mut() {
+                if *wk == key {
+                    *status = true;
                 }
             }
         }
