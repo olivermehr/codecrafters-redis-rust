@@ -15,7 +15,7 @@ impl RespServer {
         for section in INFO_SECTIONS {
             let mut section_info = format!("#{section}\n");
             if *section == "replication" {
-                section_info.push_str("role:master\n");
+                section_info.push_str(&format!("role:{}\n", self.role));
                 info_map.insert(section, section_info);
             }
         }
@@ -24,6 +24,6 @@ impl RespServer {
                 info_map.remove(&optional_section.as_str()).unwrap(),
             ));
         }
-        return Ok(info_map.into_values().collect());
+        Ok(info_map.into_values().collect())
     }
 }

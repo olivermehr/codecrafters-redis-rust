@@ -32,9 +32,31 @@ use crate::resp::{
 mod commands;
 mod resp;
 
+#[derive(Debug, Clone)]
+enum ServerRole {
+    Master,
+    Slave {
+        master_host: String,
+        master_port: String,
+    },
+}
+
+impl Display for ServerRole {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Master => write!(f, "master"),
+            Self::Slave {
+                master_host,
+                master_port,
+            } => write!(f, "slave"),
+        }
+    }
+}
+
 // Server impl as the foundation of each connection
 #[derive(Debug)]
 struct RespServer {
+    role: ServerRole,
     connection_no: usize,
     command_queue: Arc<Mutex<HashMap<usize, Option<Vec<RespNode>>>>>,
     watched_keys: Arc<Mutex<HashMap<usize, Vec<(String, bool)>>>>,
@@ -47,6 +69,7 @@ impl Clone for RespServer {
         let new_conn_no = SERVER_INDEX.fetch_add(1, atomic::Ordering::Relaxed) as usize;
         println!("New connection no for clone {}", new_conn_no);
         Self {
+            role: self.role.clone(),
             connection_no: new_conn_no,
             command_queue: self.command_queue.clone(),
             watched_keys: self.watched_keys.clone(),
@@ -123,7 +146,7 @@ static NON_MULTI_COMMANDS: &[&str] = &["exec", "discard", "watch", "unwatch"];
 static SERVER_INDEX: atomic::AtomicU64 = AtomicU64::new(0);
 
 impl RespServer {
-    fn new() -> Self {
+    fn new(role: ServerRole) -> Self {
         let (tx, mut rx) = mpsc::channel::<Expiry>(50);
         let storage = Arc::new(Mutex::new(HashMap::new()));
 
@@ -148,6 +171,7 @@ impl RespServer {
             }
         });
         Self {
+            role,
             storage,
             command_queue: Arc::new(Mutex::new(HashMap::new())),
             expiry_tx: tx,
@@ -186,6 +210,7 @@ impl RespServer {
     // clone per command does increment conn number
     fn clone_for_comm(&self) -> Self {
         Self {
+            role: self.role.clone(),
             connection_no: self.connection_no,
             command_queue: self.command_queue.clone(),
             watched_keys: self.watched_keys.clone(),
@@ -280,8 +305,10 @@ struct Expiry {
 
 #[derive(Debug, Parser)]
 struct CommandLine {
-    #[arg(short,long)]
+    #[arg(short, long)]
     port: Option<usize>,
+    #[arg(short, long)]
+    replicaof: Option<String>,
 }
 
 #[tokio::main]
@@ -295,7 +322,19 @@ async fn main() {
     } else {
         TcpListener::bind("127.0.0.1:6379").await.unwrap()
     };
-    let server = RespServer::new();
+    let role = if let Some(replica) = cli.replicaof {
+        let split = replica
+            .split_once(' ')
+            .expect("incorrect replica info format");
+        ServerRole::Slave {
+            master_host: split.0.to_string(),
+            master_port: split.1.to_string(),
+        }
+    } else {
+        ServerRole::Master
+    };
+
+    let server = RespServer::new(role);
 
     loop {
         match listener.accept().await {
