@@ -138,6 +138,7 @@ impl RespParser {
         } else if char == '+' {
             self.advance();
             let s = self.simple_string()?;
+            self.crlf()?;
             println!("{s}");
             Ok(RespNode::SimpleString(s))
         } else {
