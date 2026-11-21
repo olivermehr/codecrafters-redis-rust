@@ -371,7 +371,7 @@ async fn main() {
             host
         };
         let mut replication_init = VecDeque::from([
-            format_bulk_string(String::from("PING")),
+            format_array(&[format_bulk_string(String::from("PING"))]),
             format_array(&[
                 format_bulk_string(String::from("REPLCONF")),
                 format_bulk_string(String::from("listening-port")),
