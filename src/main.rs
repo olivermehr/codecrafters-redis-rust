@@ -412,8 +412,6 @@ async fn main() {
                                 .write_all(&replication_init.pop_front().unwrap().into_bytes())
                                 .await;
                         }
-                    } else {
-                        panic!("unrecognised replication init reponse");
                     }
                 }
             }
