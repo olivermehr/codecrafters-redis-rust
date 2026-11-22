@@ -23,14 +23,13 @@ impl RespServer {
                 .iter()
                 .map(|pair| {
                     let hex = std::str::from_utf8(pair).unwrap();
-                    println!("{}", hex);
                     let u8 = u8::from_str_radix(hex, 16).unwrap();
-                    println!("{}", u8);
-                    let string = u8.to_string();
-                    println!("{}", string);
-                    string
+                    u8.to_string()
                 })
                 .collect();
+            for c in rdb_file_bytes.char_indices() {
+                println!("{}", c.0);
+            }
 
             let rbd_message = format!("${}\r\n{}", rdb_file_bytes.len(), rdb_file_bytes);
             return Ok(CommandResponse::Multi(vec![
