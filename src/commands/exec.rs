@@ -41,8 +41,8 @@ impl RespServer {
             for node in commands {
                 response_vec.push(self.visit(node).await?)
             }
-            return Ok(CommandResponse::Single(
-                response_vec
+            return Ok(CommandResponse::Single(format_array(
+                &response_vec
                     .into_iter()
                     .map(|res| {
                         if let CommandResponse::Single(s) = res {
@@ -50,8 +50,8 @@ impl RespServer {
                         }
                         panic!("no multi responses should be here")
                     })
-                    .collect(),
-            ));
+                    .collect::<Vec<String>>(),
+            )));
         }
         Ok(CommandResponse::Single(format_error_string(
             "EXEC without MULTI",
