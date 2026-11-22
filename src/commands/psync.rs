@@ -31,7 +31,10 @@ impl RespServer {
             let rbd_message = format!(
                 "${}\r\n{}",
                 rdb_file_bytes.len(),
-                String::from_utf8(rdb_file_bytes).unwrap()
+                rdb_file_bytes
+                    .iter()
+                    .map(|b| b.to_string())
+                    .collect::<String>()
             );
             return Ok(CommandResponse::Multi(vec![
                 format_simple_string(format!("FULLRESYNC {} {}", replid, 0)),
