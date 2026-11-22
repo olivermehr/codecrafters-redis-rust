@@ -37,7 +37,11 @@ impl RespServer {
                 rdb_file_bytes.len(),
                 rdb_file_bytes
                     .iter()
-                    .map(|b| b.to_string())
+                    .map(|b| {
+                        let s = b.to_string();
+                        println!("as bytes {:?}",s.as_bytes());
+                    s
+                    })
                     .collect::<String>()
             );
             return Ok(CommandResponse::Multi(vec![
