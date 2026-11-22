@@ -28,6 +28,10 @@ impl RespServer {
                 })
                 .collect();
 
+            for i in rdb_file_bytes.iter() {
+                println!("{i}");
+            }
+
             let rbd_message = format!(
                 "${}\r\n{}",
                 rdb_file_bytes.len(),
