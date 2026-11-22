@@ -28,8 +28,8 @@ impl RespServer {
                 })
                 .collect();
 
-            for i in rdb_file_bytes.iter() {
-                println!("{i}");
+            for i in rdb_file_bytes.iter().enumerate() {
+                println!("index{} val{}",i.0,i.1);
             }
 
             let rbd_message = format!(
