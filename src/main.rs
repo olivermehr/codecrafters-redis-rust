@@ -155,7 +155,8 @@ impl From<StorageType> for String {
 #[derive(Debug, Clone)]
 pub enum CommandResponse {
     Single(String),
-    Multi(Vec<String>),
+    Bytes(Vec<u8>),
+    Multi(Vec<CommandResponse>),
 }
 
 static EMPTY_ARRAY: &[String; 0] = &[];
@@ -455,9 +456,15 @@ async fn main() {
                                                                     CommandResponse::Single(s) => stream_write.write_all(s.as_bytes()).await.unwrap(),
                                                                     CommandResponse::Multi(v) => {
                                                                         for res in v {
-                                                                            stream_write.write_all(res.as_bytes()).await.unwrap()
+                                                                            match res{
+                                                                                CommandResponse::Single(s) => stream_write.write_all(s.as_bytes()).await.unwrap(),
+                                                                                CommandResponse::Bytes(b) => stream_write.write_all(&b).await.unwrap(),
+                                                                                _ => panic!("nested command response multi not supported")
+                                                                            }
+
                                                                         }
-                                                                    }
+                                                                    },
+                                                                    CommandResponse::Bytes(b) => stream_write.write_all(&b).await.unwrap(),
 
                                                                 }
                                     Err(e) => {
