@@ -18,10 +18,17 @@ impl RespServer {
             let rbd_file_hex = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2";
             let rdb_file_bytes: String = rbd_file_hex
                 .as_bytes()
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .map(|pair| {
                     let hex = std::str::from_utf8(pair).unwrap();
-                    u8::from_str_radix(hex, 16).unwrap().to_string()
+                    println!("{}", hex);
+                    let u8 = u8::from_str_radix(hex, 16).unwrap();
+                    println!("{}", u8);
+                    let string = u8.to_string();
+                    println!("{}", string);
+                    string
                 })
                 .collect();
 
