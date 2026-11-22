@@ -21,8 +21,10 @@ impl RespServer {
                 .as_chunks::<2>()
                 .0
                 .iter()
+                .enumerate()
                 .map(|pair| {
-                    let hex = std::str::from_utf8(pair).unwrap();
+                    println!("{}", pair.0);
+                    let hex = std::str::from_utf8(pair.1).unwrap();
                     u8::from_str_radix(hex, 16).unwrap().to_string()
                 })
                 .collect();
