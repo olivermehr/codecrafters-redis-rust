@@ -456,6 +456,7 @@ async fn main() {
                 while let Ok(bytes) = stream.read(&mut buf).await
                     && bytes > 0
                 {
+                    println!("{:?}",buf);
                     let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
                     println!("replication receiving : {:?}",tree);
                     for (node, command_string) in tree {
