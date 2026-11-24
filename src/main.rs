@@ -456,9 +456,9 @@ async fn main() {
                 while let Ok(bytes) = stream.read(&mut buf).await
                     && bytes > 0
                 {
-                    println!("{:?}",buf);
+                    println!("entering replica read loop {:?}", buf);
                     let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
-                    println!("replication receiving : {:?}",tree);
+                    println!("replication receiving : {:?}", tree);
                     for (node, command_string) in tree {
                         cloned_server.visit(node).await.unwrap();
                     }
@@ -482,6 +482,7 @@ async fn main() {
                     let replicas = cs.replica_conns.read().await;
                     for r in replicas.iter() {
                         {
+                            println!(" in the replica send task {} {:?}",command,r);
                             r.lock()
                                 .await
                                 .write_all(&command.clone().into_bytes())
