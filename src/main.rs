@@ -400,66 +400,78 @@ async fn main() {
     if let ServerRole::Slave {
         master_host,
         master_port,
-    } = &server.role
+    } = server.role.clone()
     {
-        let mut replication_init = VecDeque::from([
-            format_array(&[format_bulk_string(String::from("PING"))]),
-            format_array(&[
-                format_bulk_string(String::from("REPLCONF")),
-                format_bulk_string(String::from("listening-port")),
-                format_bulk_string(listener.local_addr().unwrap().port().to_string()),
-            ]),
-            format_array(&[
-                format_bulk_string(String::from("REPLCONF")),
-                format_bulk_string(String::from("capa")),
-                format_bulk_string(String::from("psync2")),
-            ]),
-            format_array(&[
-                format_bulk_string(String::from("PSYNC")),
-                format_bulk_string(String::from("?")),
-                format_bulk_string((-1).to_string()),
-            ]),
-        ]);
-        let socket = TcpSocket::new_v4().unwrap();
-        let mut stream = socket
-            .connect(format!("{master_host}:{master_port}").parse().unwrap())
-            .await
-            .unwrap();
-        stream
-            .write_all(&replication_init.pop_front().unwrap().into_bytes())
-            .await
-            .unwrap();
-        let mut buf = [0; 1024];
-        let mut read_index = 0;
+        tokio::spawn({
+            let mut cloned_server = server.clone_for_comm();
+            let listening_port = listener.local_addr().as_ref().unwrap().port().to_string();
+            async move {
+                let mut replication_init = VecDeque::from([
+                    format_array(&[format_bulk_string(String::from("PING"))]),
+                    format_array(&[
+                        format_bulk_string(String::from("REPLCONF")),
+                        format_bulk_string(String::from("listening-port")),
+                        format_bulk_string(listening_port),
+                    ]),
+                    format_array(&[
+                        format_bulk_string(String::from("REPLCONF")),
+                        format_bulk_string(String::from("capa")),
+                        format_bulk_string(String::from("psync2")),
+                    ]),
+                    format_array(&[
+                        format_bulk_string(String::from("PSYNC")),
+                        format_bulk_string(String::from("?")),
+                        format_bulk_string((-1).to_string()),
+                    ]),
+                ]);
+                let socket = TcpSocket::new_v4().unwrap();
+                let mut stream = socket
+                    .connect(format!("{master_host}:{master_port}").parse().unwrap())
+                    .await
+                    .unwrap();
+                stream
+                    .write_all(&replication_init.pop_front().unwrap().into_bytes())
+                    .await
+                    .unwrap();
+                let mut buf = [0; 1024];
+                let mut read_index = 0;
 
-        // replica setup loop
-        'read_loop: while let Ok(bytes) = stream.read(&mut buf).await
-            && bytes > 0
-        {
-            let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
-            for (node, command_string) in tree {
-                if let RespNode::SimpleString(s) = node {
-                    if s == "ok" && replication_init.is_empty() {
-                        break 'read_loop;
-                    } else if s == "ok" || s == "pong" {
-                        stream
-                            .write_all(&replication_init.pop_front().unwrap().into_bytes())
-                            .await;
+                // replica setup loop
+                'read_loop: while let Ok(bytes) = stream.read(&mut buf).await
+                    && bytes > 0
+                {
+                    let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
+                    for (node, _command_string) in tree {
+                        if let RespNode::SimpleString(s) = node {
+                            if s == "ok" && replication_init.is_empty() {
+                                break 'read_loop;
+                            } else if s == "ok" || s == "pong" {
+                                stream
+                                    .write_all(&replication_init.pop_front().unwrap().into_bytes())
+                                    .await;
+                            }
+                        }
+                    }
+                }
+                while let Ok(bytes) = stream.read(&mut buf).await
+                    && bytes > 0
+                {
+                    let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
+                    for (node, _command_string) in tree {
+                        println!("{node:?}");
+                        cloned_server.visit(node).await;
                     }
                 }
             }
-        }
-        while let Ok(bytes) = stream.read(&mut buf).await
-            && bytes > 0
-        {
-            let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
-            for (node, command_string) in tree {
-                println!("{node:?}");
-                server.visit(node).await;
-            }
-        }
-    } else {
-        let (replcas_tx, mut replicas_rx) = tokio::sync::mpsc::channel::<String>(100);
+        });
+    }
+
+    let replicas_tx = if let ServerRole::Master {
+        replid: _,
+        offset: _,
+    } = server.role
+    {
+        let (replicas_tx, mut replicas_rx) = tokio::sync::mpsc::channel::<String>(100);
         // launch replication task
         tokio::spawn({
             let cs = server.clone_for_comm();
@@ -479,75 +491,80 @@ async fn main() {
                 }
             }
         });
-        loop {
-            match listener.accept().await {
-                Ok((stream, _)) => {
-                    let cloned_server = server.clone_for_conn();
-                    let cloned_replicas_tx = replcas_tx.clone();
-                    tokio::spawn(async move {
-                        let mut buf = [0; 1024];
-                        let mut read_index = 0;
-                        let (tx, rx) = watch::channel(());
-                        let (command_tx, mut command_rx) = mpsc::channel(100);
-                        let (mut stream_read, mut stream_write) = stream.into_split();
-                        tokio::spawn({
-                            let mut command_clone_server = cloned_server.clone_for_comm();
-                            let mut kill_switch = rx.clone();
-                            async move {
-                                while let Some(command) = command_rx.recv().await {
-                                    tokio::select! {
-                                                res = command_clone_server.visit(command) =>  {
-                                                    match res {
-                                                                      Ok(response) => {
-                                                                        if send_command_responses(&mut stream_write,response).await {
-                                                                            command_clone_server.replica_conns.write().await.push(Arc::new(tokio::sync::Mutex::new(stream_write)));
-                                                                            break
-                                                                        }
-                                                                    },
-                                        Err(e) => {
-                                            let error = match e {
-                                                RespError::Empty => format_error_string("no arguments"),
-                                                RespError::IncorrectParams => {
-                                                    format_error_string("invalid params")
-                                                }
-                                                RespError::InvalidSyntax => {
-                                                    format_error_string("invalid syntax")
-                                                }
-                                                RespError::IncompleteTcpStream => {
-                                                    format_error_string("incomplete tcp stream")
-                                                }
-                                                RespError::TcpStreamDropped => {
-                                                    format_error_string("tcp stream dropped")
-                                                }
-                                            };
-                                            if error != "tcp stream dropped" {
-                                                stream_write.write_all(error.as_bytes()).await.unwrap()
+        Some(replicas_tx)
+    } else {
+        None
+    };
+
+    loop {
+        match listener.accept().await {
+            Ok((stream, _)) => {
+                let cloned_server = server.clone_for_conn();
+                let cloned_replicas_tx = replicas_tx.clone();
+                tokio::spawn(async move {
+                    let mut buf = [0; 1024];
+                    let mut read_index = 0;
+                    let (tx, rx) = watch::channel(());
+                    let (command_tx, mut command_rx) = mpsc::channel(100);
+                    let (mut stream_read, mut stream_write) = stream.into_split();
+                    tokio::spawn({
+                        let mut command_clone_server = cloned_server.clone_for_comm();
+                        let mut kill_switch = rx.clone();
+                        async move {
+                            while let Some(command) = command_rx.recv().await {
+                                tokio::select! {
+                                            res = command_clone_server.visit(command) =>  {
+                                                match res {
+                                                                  Ok(response) => {
+                                                                    if send_command_responses(&mut stream_write,response).await {
+                                                                        command_clone_server.replica_conns.write().await.push(Arc::new(tokio::sync::Mutex::new(stream_write)));
+                                                                        break
+                                                                    }
+                                                                },
+                                    Err(e) => {
+                                        let error = match e {
+                                            RespError::Empty => format_error_string("no arguments"),
+                                            RespError::IncorrectParams => {
+                                                format_error_string("invalid params")
                                             }
+                                            RespError::InvalidSyntax => {
+                                                format_error_string("invalid syntax")
+                                            }
+                                            RespError::IncompleteTcpStream => {
+                                                format_error_string("incomplete tcp stream")
+                                            }
+                                            RespError::TcpStreamDropped => {
+                                                format_error_string("tcp stream dropped")
+                                            }
+                                        };
+                                        if error != "tcp stream dropped" {
+                                            stream_write.write_all(error.as_bytes()).await.unwrap()
                                         }
                                     }
-                                                    }
-                                                _ = kill_switch.changed() => {break}
-                                            }
                                 }
+                                                }
+                                            _ = kill_switch.changed() => {break}
+                                        }
                             }
-                        });
-                        while let Ok(bytes) = stream_read.read(&mut buf[read_index..]).await
-                            && bytes > 0
-                        {
-                            let tree =
-                                process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
+                        }
+                    });
+                    while let Ok(bytes) = stream_read.read(&mut buf[read_index..]).await
+                        && bytes > 0
+                    {
+                        let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
 
-                            for (node, command_string) in tree.into_iter() {
-                                command_tx.send(node).await;
+                        for (node, command_string) in tree.into_iter() {
+                            command_tx.send(node).await;
+                            if let Some(cloned_replicas_tx) = cloned_replicas_tx.as_ref() {
                                 cloned_replicas_tx.send(command_string).await;
                             }
                         }
-                        tx.send(())
-                    });
-                }
-                Err(e) => {
-                    println!("error: {}", e);
-                }
+                    }
+                    tx.send(())
+                });
+            }
+            Err(e) => {
+                println!("error: {}", e);
             }
         }
     }
