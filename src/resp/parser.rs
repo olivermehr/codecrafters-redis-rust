@@ -94,16 +94,19 @@ impl RespParser {
             let node = self.get_next_node();
             match node {
                 Ok(n) => {
-                    let processed_string = if let RespNode::Array(v) = &n
+                    let processed_string = self.text[..self.pos].iter().collect::<String>();
+                    let processed_string_len = processed_string.len();
+
+                    let replicated_string = if let RespNode::Array(v) = &n
                         && let Some(RespNode::BulkString(s)) = v.first()
                         && !UNREPLICATED_FNS.contains(&s.as_str())
                     {
-                        self.text[..self.pos].iter().collect::<String>()
+                        processed_string
                     } else {
                         String::new()
                     };
-                    let processed_bytes = processed_string.len();
-                    v.push((n, processed_string));
+                    let processed_bytes = processed_string_len;
+                    v.push((n, replicated_string));
                     bytes_used = processed_bytes;
                 }
                 Err(e) => {}
