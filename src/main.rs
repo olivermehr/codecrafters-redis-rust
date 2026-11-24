@@ -395,7 +395,7 @@ async fn main() {
         ServerRole::Master { replid, offset: 0 }
     };
 
-    let mut server = RespServer::new(role);
+    let server = RespServer::new(role);
 
     if let ServerRole::Slave {
         master_host,
@@ -458,8 +458,7 @@ async fn main() {
                 {
                     let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
                     for (node, command_string) in tree {
-                        println!("{node:?}");
-                        cloned_server.visit(node).await;
+                        cloned_server.visit(node).await.unwrap();
                     }
                 }
             }
@@ -516,6 +515,7 @@ async fn main() {
                                             res = command_clone_server.visit(command) =>  {
                                                 match res {
                                                                   Ok(response) => {
+                                                                    println!("{:?}",command_clone_server.storage);
                                                                     if send_command_responses(&mut stream_write,response).await {
                                                                         command_clone_server.replica_conns.write().await.push(Arc::new(tokio::sync::Mutex::new(stream_write)));
                                                                         break
@@ -578,7 +578,7 @@ async fn send_command_responses(
     //returns true when replica connection needs upgrading - kinda hacky until i figure out a better solution
     match response {
         CommandResponse::Single(s) => {
-            println!("{}",s);
+            println!("{}", s);
             stream_writer.write_all(s.as_bytes()).await.unwrap();
             false
         }
