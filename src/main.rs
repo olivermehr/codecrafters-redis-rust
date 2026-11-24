@@ -457,7 +457,6 @@ async fn main() {
                     && bytes > 0
                 {
                     let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
-                    println!("{:?}", tree);
                     for (node, command_string) in tree {
                         cloned_server.visit(node).await.unwrap();
                     }
@@ -577,7 +576,6 @@ async fn send_command_responses(
     //returns true when replica connection needs upgrading - kinda hacky until i figure out a better solution
     match response {
         CommandResponse::Single(s) => {
-            println!("{}", s);
             stream_writer.write_all(s.as_bytes()).await.unwrap();
             false
         }
