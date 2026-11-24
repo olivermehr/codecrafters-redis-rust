@@ -441,7 +441,7 @@ async fn main() {
                     && bytes > 0
                 {
                     let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
-                    for (node, _command_string) in tree {
+                    for (node, command_string) in tree {
                         if let RespNode::SimpleString(s) = node {
                             if s == "ok" && replication_init.is_empty() {
                                 break 'read_loop;
@@ -457,7 +457,7 @@ async fn main() {
                     && bytes > 0
                 {
                     let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
-                    for (node, _command_string) in tree {
+                    for (node, command_string) in tree {
                         println!("{node:?}");
                         cloned_server.visit(node).await;
                     }

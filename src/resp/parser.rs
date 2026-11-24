@@ -17,6 +17,8 @@ pub struct RespParser {
     current_char: Option<char>,
 }
 
+static UNREPLICATED_FNS: &[&str] = &["ping", "echo", "replconf", "psync"];
+
 impl RespParser {
     pub fn new(t: Vec<char>) -> Self {
         let len = t.len();
@@ -80,6 +82,7 @@ impl RespParser {
         }
         Ok(s.to_ascii_lowercase())
     }
+
     pub fn create_tree(&mut self) -> (usize, Vec<(RespNode, String)>) {
         let mut v = Vec::new();
         let mut bytes_used = 0;
@@ -91,7 +94,14 @@ impl RespParser {
             let node = self.get_next_node();
             match node {
                 Ok(n) => {
-                    let processed_string = self.text[..self.pos].iter().collect::<String>();
+                    let processed_string = if let RespNode::Array(v) = &n
+                        && let Some(RespNode::BulkString(s)) = v.first()
+                        && !UNREPLICATED_FNS.contains(&s.as_str())
+                    {
+                        self.text[..self.pos].iter().collect::<String>()
+                    } else {
+                        String::new()
+                    };
                     let processed_bytes = processed_string.len();
                     v.push((n, processed_string));
                     bytes_used = processed_bytes;
