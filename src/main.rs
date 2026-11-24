@@ -454,6 +454,7 @@ async fn main() {
         {
             let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
             for (node, command_string) in tree {
+                println!("{node}");
                 server.visit(node).await;
             }
         }
