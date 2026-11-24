@@ -554,6 +554,7 @@ async fn main() {
                         let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
 
                         for (node, command_string) in tree.into_iter() {
+                            println!("{:?}", node);
                             command_tx.send(node).await;
                             if let Some(cloned_replicas_tx) = cloned_replicas_tx.as_ref() {
                                 cloned_replicas_tx.send(command_string).await;
@@ -577,6 +578,7 @@ async fn send_command_responses(
     //returns true when replica connection needs upgrading - kinda hacky until i figure out a better solution
     match response {
         CommandResponse::Single(s) => {
+            println!("{}",s);
             stream_writer.write_all(s.as_bytes()).await.unwrap();
             false
         }
