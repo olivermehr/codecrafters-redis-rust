@@ -95,7 +95,6 @@ impl RespParser {
             match node {
                 Ok(n) => {
                     let processed_string = self.text[..self.pos].iter().collect::<String>();
-                    println!("{}",processed_string);
                     let processed_string_len = processed_string.len();
 
                     let replicated_string = if let RespNode::Array(v) = &n

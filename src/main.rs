@@ -457,6 +457,7 @@ async fn main() {
                     && bytes > 0
                 {
                     let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
+                    println!("replication receiving : {:?}",tree);
                     for (node, command_string) in tree {
                         cloned_server.visit(node).await.unwrap();
                     }
