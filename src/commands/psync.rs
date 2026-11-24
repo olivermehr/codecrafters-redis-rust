@@ -35,6 +35,7 @@ impl RespServer {
                     replid, 0
                 ))),
                 CommandResponse::Bytes(rbd_message),
+                CommandResponse::PromoteReplicaConn,
             ]));
         }
         Err(RespError::InvalidSyntax)

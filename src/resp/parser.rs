@@ -11,7 +11,7 @@ pub enum RespNode {
 }
 #[derive(Debug)]
 pub struct RespParser {
-    text: Vec<char>,
+    pub text: Vec<char>,
     pos: usize,
     len: usize,
     current_char: Option<char>,
@@ -80,7 +80,7 @@ impl RespParser {
         }
         Ok(s.to_ascii_lowercase())
     }
-    pub fn create_tree(&mut self) -> (usize, Vec<RespNode>) {
+    pub fn create_tree(&mut self) -> (usize, Vec<(RespNode, String)>) {
         let mut v = Vec::new();
         let mut bytes_used = 0;
         if self.pos >= self.len {
@@ -91,8 +91,10 @@ impl RespParser {
             let node = self.get_next_node();
             match node {
                 Ok(n) => {
-                    v.push(n);
-                    bytes_used = self.pos * 4;
+                    let processed_string = self.text[..self.pos].iter().collect::<String>();
+                    let processed_bytes = processed_string.len();
+                    v.push((n, processed_string));
+                    bytes_used = processed_bytes;
                 }
                 Err(e) => {}
             }
