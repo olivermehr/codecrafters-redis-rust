@@ -162,7 +162,7 @@ impl<'a> RespParser<'a> {
             println!("{}",self.pos);
             for _ in 0..l {
                 children.push(self.get_next_node(replica_handshake_mode)?);
-                println!()
+                println!("{:?}",children);
                 self.crlf()?;
             }
             Ok(RespNode::Array(children))
