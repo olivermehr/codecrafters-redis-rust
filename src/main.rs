@@ -608,6 +608,9 @@ async fn send_command_responses(
             false
         }
         CommandResponse::PromoteReplicaConn => true,
+        CommandResponse::ReplicaResponse(r) => {
+            Box::pin(send_command_responses(stream_writer, *r)).await
+        }
     }
 }
 
