@@ -575,6 +575,7 @@ async fn main() {
                         for (node, command_string) in tree.into_iter() {
                             command_tx.send(node).await;
                             if let Some(cloned_replicas_tx) = cloned_replicas_tx.as_ref() {
+                                println!("master {}", command_string);
                                 cloned_replicas_tx.send(command_string).await;
                             }
                         }
