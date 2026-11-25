@@ -176,7 +176,6 @@ impl<'a> RespParser<'a> {
             } else {
                 println!("parsing bulk string");
                 let s = self.bulk_string(l)?;
-                self.crlf()?;
                 Ok(BulkString(s))
             }
         } else if byte == b':' {
