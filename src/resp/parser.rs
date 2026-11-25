@@ -88,6 +88,18 @@ impl<'a> RespParser<'a> {
         Ok(String::from_utf8(s).unwrap().to_lowercase())
     }
 
+    fn rdb_file(&mut self, len: i32) -> Result<Vec<u8>, RespError> {
+        let mut v = Vec::new();
+        for _ in 0..len {
+            match self.current_byte {
+                Some(byte) => v.push(byte),
+                None => Err(RespError::IncompleteTcpStream)?,
+            }
+            self.advance();
+        }
+        Ok(v)
+    }
+
     pub fn create_tree(
         &mut self,
         replica_handshake_mode: bool,
@@ -152,10 +164,11 @@ impl<'a> RespParser<'a> {
             self.advance();
             let l = self.integer()?;
             self.crlf()?;
-            let s = self.bulk_string(l)?;
             if replica_handshake_mode {
-                Ok(RdbFile(s.into_bytes()))
+                let rdb_file = self.rdb_file(l)?;
+                Ok(RdbFile(rdb_file))
             } else {
+                let s = self.bulk_string(l)?;
                 self.crlf()?;
                 Ok(BulkString(s))
             }
