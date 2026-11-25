@@ -1,4 +1,4 @@
-use crate::CommandResponse;
+use crate::{CommandResponse, ServerRole, format_bulk_string};
 use std::collections::HashSet;
 
 use crate::{
@@ -8,6 +8,23 @@ use crate::{
 
 impl RespServer {
     pub async fn replconf(&mut self, mut v: CommandArgs) -> Result<CommandResponse, RespError> {
-        Ok(CommandResponse::Single(format_simple_string(String::from("OK"))))
+        let arg = get_bulk_string_arg(v.next())?;
+        if arg.eq_ignore_ascii_case("getack")
+            && let ServerRole::Slave {
+                master_host,
+                master_port,
+            } = &self.role
+        {
+            return Ok(CommandResponse::ReplicaResponse(Box::new(
+                CommandResponse::Single(format_array(&[
+                    format_bulk_string(String::from("REPLCONF")),
+                    format_bulk_string(String::from("ACK")),
+                    format_bulk_string(0.to_string()),
+                ])),
+            )));
+        }
+        Ok(CommandResponse::Single(format_simple_string(String::from(
+            "OK",
+        ))))
     }
 }

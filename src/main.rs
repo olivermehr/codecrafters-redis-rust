@@ -165,6 +165,7 @@ pub enum CommandResponse {
     Bytes(Vec<u8>),
     Multi(Vec<CommandResponse>),
     PromoteReplicaConn,
+    ReplicaResponse(Box<CommandResponse>),
 }
 
 static EMPTY_ARRAY: &[String; 0] = &[];
@@ -426,11 +427,12 @@ async fn main() {
                     ]),
                 ]);
                 let socket = TcpSocket::new_v4().unwrap();
-                let mut stream = socket
+                let stream = socket
                     .connect(format!("{master_host}:{master_port}").parse().unwrap())
                     .await
                     .unwrap();
-                stream
+                let (mut stream_read, mut stream_write) = stream.into_split();
+                stream_write
                     .write_all(&replication_init.pop_front().unwrap().into_bytes())
                     .await
                     .unwrap();
@@ -438,7 +440,7 @@ async fn main() {
                 let mut read_index = 0;
                 let mut handshake_complete = false;
 
-                while let Ok(bytes) = stream.read(&mut buf).await
+                while let Ok(bytes) = stream_read.read(&mut buf).await
                     && bytes > 0
                 {
                     let tree = process_incoming_tcp_stream(
@@ -450,14 +452,21 @@ async fn main() {
 
                     if handshake_complete {
                         for (node, command_string) in tree {
-                            cloned_server.visit(node).await.unwrap();
+                            if let CommandResponse::ReplicaResponse(inner) =
+                                cloned_server.visit(node).await.unwrap()
+                            {
+                                send_command_responses(&mut stream_write, *inner).await;
+                            }
                         }
                     } else {
                         for (node, command_string) in tree {
                             if let RespNode::SimpleString(s) = node {
                                 let s = s.to_lowercase();
-                                if s == "ok" || s == "pong" && !replication_init.is_empty() {
-                                    stream
+                                if s.eq_ignore_ascii_case("ok")
+                                    || s.eq_ignore_ascii_case("pong")
+                                        && !replication_init.is_empty()
+                                {
+                                    stream_write
                                         .write_all(
                                             &replication_init.pop_front().unwrap().into_bytes(),
                                         )
