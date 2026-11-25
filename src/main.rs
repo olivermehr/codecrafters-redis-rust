@@ -447,6 +447,7 @@ async fn main() {
                         bytes,
                         !handshake_complete,
                     );
+                    println!("{tree:?}");
                     if handshake_complete {
                         for (node, command_string) in tree {
                             cloned_server.visit(node).await.unwrap();
