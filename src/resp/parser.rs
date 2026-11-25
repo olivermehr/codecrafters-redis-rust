@@ -153,6 +153,7 @@ impl<'a> RespParser<'a> {
     fn get_next_node(&mut self, replica_handshake_mode: bool) -> Result<RespNode, RespError> {
         let byte = self.current_byte.ok_or(RespError::IncompleteTcpStream)?;
         if byte == b'*' {
+            println!("entering array parser");
             self.advance();
             let l = self.integer()?;
             let mut children = Vec::new();
