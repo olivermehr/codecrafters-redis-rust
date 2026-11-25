@@ -156,8 +156,10 @@ impl<'a> RespParser<'a> {
             println!("entering array parser");
             self.advance();
             let l = self.integer()?;
+            println!("integer for array {l} {}", self.pos);
             let mut children = Vec::new();
             self.crlf()?;
+            println!("{}",self.pos);
             for _ in 0..l {
                 children.push(self.get_next_node(replica_handshake_mode)?);
                 self.crlf()?;
