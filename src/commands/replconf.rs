@@ -16,6 +16,13 @@ impl RespServer {
                 offset,
             } = &self.role
         {
+            let bl_for_replconf_cmd = format_array(&[
+                format_bulk_string(String::from("REPLCONF")),
+                format_bulk_string(String::from("ACK")),
+                format_bulk_string(String::from("*")),
+            ]);
+            println!("{}\n{}", bl_for_replconf_cmd, bl_for_replconf_cmd.len());
+
             return Ok(CommandResponse::ReplicaResponse(Box::new(
                 CommandResponse::Single(format_array(&[
                     format_bulk_string(String::from("REPLCONF")),
