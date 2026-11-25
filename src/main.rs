@@ -452,7 +452,7 @@ async fn main() {
                         if let ServerRole::Slave {
                             master_host,
                             master_port,
-                        } = &server.role
+                        } = &cloned_server.role
                         {
                             true
                         } else {
