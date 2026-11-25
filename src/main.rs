@@ -438,8 +438,7 @@ async fn main() {
                 let mut read_index = 0;
                 let mut handshake_complete = false;
 
-                // replica setup loop
-                'read_loop: while let Ok(bytes) = stream.read(&mut buf).await
+                while let Ok(bytes) = stream.read(&mut buf).await
                     && bytes > 0
                 {
                     let tree = process_incoming_tcp_stream(
@@ -448,6 +447,7 @@ async fn main() {
                         bytes,
                         !handshake_complete,
                     );
+                    println!("{:?}",tree)
                     if handshake_complete {
                         for (node, command_string) in tree {
                             cloned_server.visit(node).await.unwrap();
