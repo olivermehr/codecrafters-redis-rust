@@ -119,10 +119,6 @@ impl<'a> RespParser<'a> {
                         && !UNREPLICATED_FNS.contains(&s.as_str())
                     {
                         let s = String::from_utf8(self.bytes[..self.pos].to_vec()).unwrap();
-                        println!(
-                            "inside create tree is the processed string being created {}",
-                            s
-                        );
                         s
                     } else {
                         String::new()
@@ -153,16 +149,12 @@ impl<'a> RespParser<'a> {
     fn get_next_node(&mut self, replica_handshake_mode: bool) -> Result<RespNode, RespError> {
         let byte = self.current_byte.ok_or(RespError::IncompleteTcpStream)?;
         if byte == b'*' {
-            println!("entering array parser");
             self.advance();
             let l = self.integer()?;
-            println!("integer for array {l} {}", self.pos);
             let mut children = Vec::new();
             self.crlf()?;
-            println!("{}",self.pos);
             for _ in 0..l {
                 children.push(self.get_next_node(replica_handshake_mode)?);
-                println!("{:?}",children);
                 self.crlf()?;
             }
             Ok(RespNode::Array(children))
@@ -174,7 +166,6 @@ impl<'a> RespParser<'a> {
                 let rdb_file = self.rdb_file(l)?;
                 Ok(RdbFile(rdb_file))
             } else {
-                println!("parsing bulk string");
                 let s = self.bulk_string(l)?;
                 Ok(BulkString(s))
             }

@@ -447,18 +447,7 @@ async fn main() {
                         bytes,
                         !handshake_complete,
                     );
-                    println!(
-                        "is_replica {}: {tree:?}",
-                        if let ServerRole::Slave {
-                            master_host,
-                            master_port,
-                        } = &cloned_server.role
-                        {
-                            true
-                        } else {
-                            false
-                        }
-                    );
+
                     if handshake_complete {
                         for (node, command_string) in tree {
                             cloned_server.visit(node).await.unwrap();
@@ -571,7 +560,6 @@ async fn main() {
                     {
                         let tree =
                             process_incoming_tcp_stream(&mut buf, &mut read_index, bytes, false);
-                        println!("master {:?}", tree);
                         for (node, command_string) in tree.into_iter() {
                             command_tx.send(node).await;
                             if let Some(cloned_replicas_tx) = cloned_replicas_tx.as_ref() {
