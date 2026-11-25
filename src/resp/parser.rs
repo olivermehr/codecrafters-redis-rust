@@ -1,6 +1,9 @@
 use std::rc::Rc;
 
-use crate::resp::error::RespError;
+use crate::resp::{
+    error::RespError,
+    parser::RespNode::{BulkString, RdbFile},
+};
 
 #[derive(Debug, Clone)]
 pub enum RespNode {
@@ -8,50 +11,51 @@ pub enum RespNode {
     SimpleString(String),
     BulkString(String),
     Integer(isize),
+    RdbFile(Vec<u8>),
 }
 #[derive(Debug)]
-pub struct RespParser {
-    pub text: Vec<char>,
+pub struct RespParser<'a> {
+    pub bytes: &'a [u8],
     pos: usize,
     len: usize,
-    current_char: Option<char>,
+    current_byte: Option<u8>,
 }
 
 static UNREPLICATED_FNS: &[&str] = &["ping", "echo", "replconf", "psync"];
 
-impl RespParser {
-    pub fn new(t: Vec<char>) -> Self {
-        let len = t.len();
+impl<'a> RespParser<'a> {
+    pub fn new(b: &'a [u8]) -> Self {
+        let len = b.len();
         Self {
-            text: t,
+            bytes: b,
             pos: 0,
             len,
-            current_char: None,
+            current_byte: None,
         }
     }
     fn advance(&mut self) {
         self.pos += 1;
         if self.pos < self.len {
-            self.current_char = Some(self.text[self.pos]);
+            self.current_byte = Some(self.bytes[self.pos]);
         } else {
-            self.current_char = None
+            self.current_byte = None
         }
     }
 
-    fn peek(&self, offset: usize) -> Option<char> {
+    fn peek(&self, offset: usize) -> Option<u8> {
         if self.pos + offset < self.len {
-            return Some(self.text[self.pos + offset]);
+            return Some(self.bytes[self.pos + offset]);
         }
         None
     }
 
     fn simple_string(&mut self) -> Result<String, RespError> {
-        let mut s = String::new();
-        while let Some(char) = self.current_char {
-            if char == '\r' {
-                return Ok(s);
+        let mut s = Vec::new();
+        while let Some(byte) = self.current_byte {
+            if byte == b'\r' {
+                return Ok(String::from_utf8(s).unwrap());
             } else {
-                s.push(char);
+                s.push(byte);
                 self.advance();
             }
         }
@@ -59,12 +63,13 @@ impl RespParser {
     }
 
     fn integer(&mut self) -> Result<i32, RespError> {
-        let mut num = String::new();
-        while let Some(char) = self.current_char {
-            if char.is_numeric() {
-                num.push(char);
+        let mut num = Vec::new();
+        while let Some(byte) = self.current_byte {
+            if byte.is_ascii_digit() {
+                num.push(byte);
                 self.advance();
             } else {
+                let num = String::from_utf8(num).unwrap();
                 return num.parse().map_err(|e| RespError::InvalidSyntax);
             }
         }
@@ -72,31 +77,33 @@ impl RespParser {
     }
 
     fn bulk_string(&mut self, len: i32) -> Result<String, RespError> {
-        let mut s = String::new();
+        let mut s = Vec::new();
         for _ in 0..len {
-            match self.current_char {
-                Some(char) => s.push(char),
+            match self.current_byte {
+                Some(byte) => s.push(byte),
                 None => Err(RespError::IncompleteTcpStream)?,
             }
             self.advance();
         }
-        Ok(s.to_ascii_lowercase())
+        Ok(String::from_utf8(s).unwrap().to_lowercase())
     }
 
-    pub fn create_tree(&mut self) -> (usize, Vec<(RespNode, String)>) {
-        println!("{:?}",self.text);
+    pub fn create_tree(
+        &mut self,
+        replica_handshake_mode: bool,
+    ) -> (usize, Vec<(RespNode, String)>) {
         let mut v = Vec::new();
         let mut bytes_used = 0;
         if self.pos >= self.len {
             return (bytes_used, v);
         }
-        self.current_char = Some(self.text[self.pos]);
+        self.current_byte = Some(self.bytes[self.pos]);
         while self.pos < self.len {
-            let node = self.get_next_node();
+            let node = self.get_next_node(replica_handshake_mode);
             match node {
                 Ok(n) => {
-                    let processed_string = self.text[..self.pos].iter().collect::<String>();
-                    let processed_string_len = processed_string.len();
+                    let processed_string =
+                        String::from_utf8(self.bytes[..self.pos].to_vec()).unwrap();
 
                     let replicated_string = if let RespNode::Array(v) = &n
                         && let Some(RespNode::BulkString(s)) = v.first()
@@ -106,9 +113,8 @@ impl RespParser {
                     } else {
                         String::new()
                     };
-                    let processed_bytes = processed_string_len;
                     v.push((n, replicated_string));
-                    bytes_used = processed_bytes;
+                    bytes_used = self.pos;
                 }
                 Err(e) => {}
             }
@@ -117,10 +123,10 @@ impl RespParser {
     }
 
     fn crlf(&mut self) -> Result<(), RespError> {
-        let tokens = ['\r', '\n'];
+        let tokens = [b'\r', b'\n'];
         for i in tokens {
-            if let Some(char) = self.current_char
-                && char == i
+            if let Some(byte) = self.current_byte
+                && byte == i
             {
                 self.advance();
             } else {
@@ -130,35 +136,40 @@ impl RespParser {
         Ok(())
     }
 
-    fn get_next_node(&mut self) -> Result<RespNode, RespError> {
-        let char = self.current_char.ok_or(RespError::IncompleteTcpStream)?;
-        if char == '*' {
+    fn get_next_node(&mut self, replica_handshake_mode: bool) -> Result<RespNode, RespError> {
+        let byte = self.current_byte.ok_or(RespError::IncompleteTcpStream)?;
+        if byte == b'*' {
             self.advance();
             let l = self.integer()?;
             let mut children = Vec::new();
             self.crlf()?;
             for _ in 0..l {
-                children.push(self.get_next_node()?);
+                children.push(self.get_next_node(replica_handshake_mode)?);
                 self.crlf()?;
             }
             Ok(RespNode::Array(children))
-        } else if char == '$' {
+        } else if byte == b'$' {
             self.advance();
             let l = self.integer()?;
             self.crlf()?;
             let s = self.bulk_string(l)?;
-            Ok(RespNode::BulkString(s))
-        } else if char == ':' {
+            if replica_handshake_mode {
+                return Ok(RdbFile(s.into_bytes()));
+            } else {
+                self.crlf()?;
+                Ok(BulkString(s))
+            }
+        } else if byte == b':' {
             self.advance();
             let int = self.integer()?;
             Ok(RespNode::Integer(int as isize))
-        } else if char == '+' {
+        } else if byte == b'+' {
             self.advance();
             let s = self.simple_string()?;
             self.crlf()?;
             Ok(RespNode::SimpleString(s))
         } else {
-            panic!("unsupported token {:?}", self.current_char)
+            panic!("unsupported token {:?}", self.current_byte)
         }
     }
 }

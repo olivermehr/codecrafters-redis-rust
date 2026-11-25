@@ -34,7 +34,10 @@ use tokio::{
 
 use crate::resp::{
     error::RespError,
-    parser::{RespNode, RespParser},
+    parser::{
+        RespNode::{self, RdbFile},
+        RespParser,
+    },
 };
 mod commands;
 mod resp;
@@ -342,12 +345,10 @@ fn process_incoming_tcp_stream(
     buf: &mut [u8; 1024],
     read_index: &mut usize,
     bytes_read: usize,
+    replica_handshake_mode: bool,
 ) -> Vec<(RespNode, String)> {
-    let s = String::from_utf8_lossy(&buf[..*read_index + bytes_read])
-        .into_owned()
-        .to_lowercase();
-    let mut parser = RespParser::new(s.chars().collect());
-    let (bytes_used, tree) = parser.create_tree();
+    let mut parser = RespParser::new(&buf[..*read_index + bytes_read]);
+    let (bytes_used, tree) = parser.create_tree(replica_handshake_mode);
     if bytes_used >= buf.len() {
         buf.fill(0);
     } else {
@@ -435,32 +436,36 @@ async fn main() {
                     .unwrap();
                 let mut buf = [0; 1024];
                 let mut read_index = 0;
+                let mut handshake_complete = false;
 
                 // replica setup loop
                 'read_loop: while let Ok(bytes) = stream.read(&mut buf).await
                     && bytes > 0
                 {
-                    let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
-                    for (node, command_string) in tree {
-                        if let RespNode::SimpleString(s) = node {
-                            if s == "ok" && replication_init.is_empty() {
-                                break 'read_loop;
-                            } else if s == "ok" || s == "pong" {
-                                stream
-                                    .write_all(&replication_init.pop_front().unwrap().into_bytes())
-                                    .await;
+                    let tree = process_incoming_tcp_stream(
+                        &mut buf,
+                        &mut read_index,
+                        bytes,
+                        !handshake_complete,
+                    );
+                    if handshake_complete {
+                        for (node, command_string) in tree {
+                            cloned_server.visit(node).await.unwrap();
+                        }
+                    } else {
+                        for (node, command_string) in tree {
+                            if let RespNode::SimpleString(s) = node {
+                                if s == "ok" || s == "pong" && !replication_init.is_empty() {
+                                    stream
+                                        .write_all(
+                                            &replication_init.pop_front().unwrap().into_bytes(),
+                                        )
+                                        .await;
+                                }
+                            } else if let RdbFile(v) = node {
+                                handshake_complete = true;
                             }
                         }
-                    }
-                }
-                while let Ok(bytes) = stream.read(&mut buf).await
-                    && bytes > 0
-                {
-                    println!("entering replica read loop {:?}", buf);
-                    let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
-                    println!("replication receiving : {:?}", tree);
-                    for (node, command_string) in tree {
-                        cloned_server.visit(node).await.unwrap();
                     }
                 }
             }
@@ -553,7 +558,8 @@ async fn main() {
                     while let Ok(bytes) = stream_read.read(&mut buf[read_index..]).await
                         && bytes > 0
                     {
-                        let tree = process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
+                        let tree =
+                            process_incoming_tcp_stream(&mut buf, &mut read_index, bytes, false);
 
                         for (node, command_string) in tree.into_iter() {
                             command_tx.send(node).await;
