@@ -84,6 +84,7 @@ impl RespParser {
     }
 
     pub fn create_tree(&mut self) -> (usize, Vec<(RespNode, String)>) {
+        println!("{:?}",self.text);
         let mut v = Vec::new();
         let mut bytes_used = 0;
         if self.pos >= self.len {
