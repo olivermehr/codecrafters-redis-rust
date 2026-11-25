@@ -447,7 +447,18 @@ async fn main() {
                         bytes,
                         !handshake_complete,
                     );
-                    println!("{tree:?}");
+                    println!(
+                        "is_replica {}: {tree:?}",
+                        if let ServerRole::Slave {
+                            master_host,
+                            master_port,
+                        } = &server.role
+                        {
+                            true
+                        } else {
+                            false
+                        }
+                    );
                     if handshake_complete {
                         for (node, command_string) in tree {
                             cloned_server.visit(node).await.unwrap();
