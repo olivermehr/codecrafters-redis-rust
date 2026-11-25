@@ -114,14 +114,11 @@ impl<'a> RespParser<'a> {
             let node = self.get_next_node(replica_handshake_mode);
             match node {
                 Ok(n) => {
-                    let processed_string =
-                        String::from_utf8(self.bytes[..self.pos].to_vec()).unwrap();
-
                     let replicated_string = if let RespNode::Array(v) = &n
                         && let Some(RespNode::BulkString(s)) = v.first()
                         && !UNREPLICATED_FNS.contains(&s.as_str())
                     {
-                        processed_string
+                        String::from_utf8(self.bytes[..self.pos].to_vec()).unwrap()
                     } else {
                         String::new()
                     };
