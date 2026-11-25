@@ -11,7 +11,11 @@ impl RespServer {
     pub async fn psync(&mut self, mut v: CommandArgs) -> Result<CommandResponse, RespError> {
         let slave_replicaton_id = get_bulk_string_arg(v.next())?;
         let slave_offset = get_bulk_string_arg(v.next())?;
-        if let ServerRole::Master { replid, offset } = &self.role
+        if let ServerRole::Master {
+            replid,
+            offset,
+            connected_slaves,
+        } = &mut self.role
             && slave_replicaton_id == "?"
             && slave_offset == "-1"
         {
@@ -29,6 +33,8 @@ impl RespServer {
 
             let mut rbd_message = format!("${}\r\n", rdb_file_bytes.len()).into_bytes();
             rbd_message.extend(rdb_file_bytes);
+            connected_slaves.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
             return Ok(CommandResponse::Multi(vec![
                 CommandResponse::Single(format_simple_string(format!(
                     "FULLRESYNC {} {}",

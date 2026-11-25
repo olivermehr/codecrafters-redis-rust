@@ -50,6 +50,7 @@ enum ServerRole {
     Master {
         replid: String,
         offset: Arc<atomic::AtomicUsize>,
+        connected_slaves: Arc<atomic::AtomicUsize>,
     },
     Slave {
         master_host: String,
@@ -61,7 +62,11 @@ enum ServerRole {
 impl Display for ServerRole {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Master { replid, offset } => write!(
+            Self::Master {
+                replid,
+                offset,
+                connected_slaves,
+            } => write!(
                 f,
                 "role:master\nmaster_replid:{replid}\nmaster_repl_offset:{}\n",
                 offset.load(atomic::Ordering::Relaxed)
@@ -232,7 +237,11 @@ impl RespServer {
                 } => {
                     offset.fetch_add(bytes_used, atomic::Ordering::Relaxed);
                 }
-                ServerRole::Master { replid, offset } => {}
+                ServerRole::Master {
+                    replid,
+                    offset,
+                    connected_slaves,
+                } => {}
             }
         }
         if bytes_used >= buf.len() {
@@ -417,6 +426,7 @@ async fn main() {
         ServerRole::Master {
             replid,
             offset: Arc::new(atomic::AtomicUsize::new(0)),
+            connected_slaves: Arc::new(atomic::AtomicUsize::new(0)),
         }
     };
 
@@ -509,6 +519,7 @@ async fn main() {
     let replicas_tx = if let ServerRole::Master {
         replid: _,
         offset: _,
+        connected_slaves: _,
     } = server.role
     {
         let (replicas_tx, mut replicas_rx) = tokio::sync::mpsc::channel::<String>(100);
