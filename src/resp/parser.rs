@@ -123,7 +123,7 @@ impl<'a> RespParser<'a> {
     }
 
     fn crlf(&mut self) -> Result<(), RespError> {
-        let tokens = [b'\r', b'\n'];
+        let tokens = *b"\r\n";
         for i in tokens {
             if let Some(byte) = self.current_byte
                 && byte == i
@@ -154,7 +154,7 @@ impl<'a> RespParser<'a> {
             self.crlf()?;
             let s = self.bulk_string(l)?;
             if replica_handshake_mode {
-                return Ok(RdbFile(s.into_bytes()));
+                Ok(RdbFile(s.into_bytes()))
             } else {
                 self.crlf()?;
                 Ok(BulkString(s))

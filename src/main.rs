@@ -455,6 +455,7 @@ async fn main() {
                     } else {
                         for (node, command_string) in tree {
                             if let RespNode::SimpleString(s) = node {
+                                let s = s.to_lowercase();
                                 if s == "ok" || s == "pong" && !replication_init.is_empty() {
                                     stream
                                         .write_all(
