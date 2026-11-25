@@ -171,6 +171,7 @@ impl<'a> RespParser<'a> {
                 let rdb_file = self.rdb_file(l)?;
                 Ok(RdbFile(rdb_file))
             } else {
+                print
                 let s = self.bulk_string(l)?;
                 self.crlf()?;
                 Ok(BulkString(s))
