@@ -16,19 +16,19 @@ impl RespServer {
                 offset,
             } = &self.role
         {
-            let bl_for_replconf_cmd = format_array(&[
+            let bl_replconf_cmd = format_array(&[
                 format_bulk_string(String::from("REPLCONF")),
                 format_bulk_string(String::from("GETACK")),
                 format_bulk_string(String::from("*")),
             ]);
-            println!("{}\n{}", bl_for_replconf_cmd, bl_for_replconf_cmd.len());
 
             return Ok(CommandResponse::ReplicaResponse(Box::new(
                 CommandResponse::Single(format_array(&[
                     format_bulk_string(String::from("REPLCONF")),
                     format_bulk_string(String::from("ACK")),
                     format_bulk_string(
-                        (offset.load(std::sync::atomic::Ordering::Relaxed)).to_string(),
+                        (offset.load(std::sync::atomic::Ordering::Relaxed) - bl_replconf_cmd.len())
+                            .to_string(),
                     ),
                 ])),
             )));
