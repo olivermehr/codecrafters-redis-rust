@@ -13,13 +13,23 @@ impl RespServer {
             && let ServerRole::Slave {
                 master_host,
                 master_port,
+                offset,
             } = &self.role
         {
             return Ok(CommandResponse::ReplicaResponse(Box::new(
                 CommandResponse::Single(format_array(&[
                     format_bulk_string(String::from("REPLCONF")),
                     format_bulk_string(String::from("ACK")),
-                    format_bulk_string(0.to_string()),
+                    format_bulk_string(
+                        (offset.load(std::sync::atomic::Ordering::Relaxed)
+                            - format_array(&[
+                                format_bulk_string(String::from("REPLCONF")),
+                                format_bulk_string(String::from("ACK")),
+                                format_bulk_string(String::from("*")),
+                            ])
+                            .len())
+                        .to_string(),
+                    ),
                 ])),
             )));
         }

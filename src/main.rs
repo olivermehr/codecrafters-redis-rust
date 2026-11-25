@@ -16,7 +16,7 @@ use std::{
     ops::Add,
     sync::{
         Arc, Mutex, MutexGuard,
-        atomic::{self, AtomicU64},
+        atomic::{self, AtomicU64, AtomicUsize},
     },
     time::Duration,
 };
@@ -32,11 +32,14 @@ use tokio::{
     },
 };
 
-use crate::resp::{
-    error::RespError,
-    parser::{
-        RespNode::{self, RdbFile},
-        RespParser,
+use crate::{
+    ServerRole::Master,
+    resp::{
+        error::RespError,
+        parser::{
+            RespNode::{self, RdbFile},
+            RespParser,
+        },
     },
 };
 mod commands;
@@ -46,11 +49,12 @@ mod resp;
 enum ServerRole {
     Master {
         replid: String,
-        offset: usize,
+        offset: Arc<atomic::AtomicUsize>,
     },
     Slave {
         master_host: String,
         master_port: String,
+        offset: Arc<AtomicUsize>,
     },
 }
 
@@ -59,11 +63,13 @@ impl Display for ServerRole {
         match self {
             Self::Master { replid, offset } => write!(
                 f,
-                "role:master\nmaster_replid:{replid}\nmaster_repl_offset:{offset}\n"
+                "role:master\nmaster_replid:{replid}\nmaster_repl_offset:{}\n",
+                offset.load(atomic::Ordering::Relaxed)
             ),
             Self::Slave {
                 master_host,
                 master_port,
+                offset,
             } => write!(f, "role:slave"),
         }
     }
@@ -207,6 +213,44 @@ impl RespServer {
             connection_no: SERVER_INDEX.fetch_add(1, atomic::Ordering::Relaxed) as usize,
         }
     }
+
+    fn process_incoming_tcp_stream(
+        &mut self,
+        buf: &mut [u8; 1024],
+        read_index: &mut usize,
+        bytes_read: usize,
+        replica_handshake_mode: bool,
+    ) -> Vec<(RespNode, String)> {
+        let mut parser = RespParser::new(&buf[..*read_index + bytes_read]);
+        let (bytes_used, tree) = parser.create_tree(replica_handshake_mode);
+        match &mut self.role {
+            ServerRole::Slave {
+                master_host,
+                master_port,
+                offset,
+            } => {
+                offset.fetch_add(bytes_used, atomic::Ordering::Relaxed);
+            }
+            ServerRole::Master { replid, offset } => {
+                offset.fetch_add(bytes_used, atomic::Ordering::Relaxed);
+            }
+        }
+        if bytes_used >= buf.len() {
+            buf.fill(0);
+        } else {
+            if bytes_used == 0 {
+                *read_index = bytes_read;
+            } else {
+                *read_index = 0;
+                buf.copy_within(bytes_used.., 0);
+                let remaining = buf.len() - bytes_used;
+                for i in buf[remaining..].iter_mut() {
+                    *i = 0;
+                }
+            }
+        }
+        tree
+    }
     async fn visit(&mut self, node: RespNode) -> Result<CommandResponse, RespError> {
         if let RespNode::Array(v) = &node
             && let Some(Some(command_vec)) = &mut self
@@ -342,31 +386,6 @@ struct CommandLine {
     replicaof: Option<String>,
 }
 
-fn process_incoming_tcp_stream(
-    buf: &mut [u8; 1024],
-    read_index: &mut usize,
-    bytes_read: usize,
-    replica_handshake_mode: bool,
-) -> Vec<(RespNode, String)> {
-    let mut parser = RespParser::new(&buf[..*read_index + bytes_read]);
-    let (bytes_used, tree) = parser.create_tree(replica_handshake_mode);
-    if bytes_used >= buf.len() {
-        buf.fill(0);
-    } else {
-        if bytes_used == 0 {
-            *read_index = bytes_read;
-        } else {
-            *read_index = 0;
-            buf.copy_within(bytes_used.., 0);
-            let remaining = buf.len() - bytes_used;
-            for i in buf[remaining..].iter_mut() {
-                *i = 0;
-            }
-        }
-    }
-    tree
-}
-
 #[tokio::main]
 async fn main() {
     let cli = CommandLine::parse();
@@ -391,10 +410,14 @@ async fn main() {
         ServerRole::Slave {
             master_host: host.to_string(),
             master_port: port.to_string(),
+            offset: Arc::new(atomic::AtomicUsize::new(0)),
         }
     } else {
         let replid = String::from_utf8(rng().sample_iter(Alphanumeric).take(40).collect()).unwrap();
-        ServerRole::Master { replid, offset: 0 }
+        ServerRole::Master {
+            replid,
+            offset: Arc::new(atomic::AtomicUsize::new(0)),
+        }
     };
 
     let server = RespServer::new(role);
@@ -402,6 +425,7 @@ async fn main() {
     if let ServerRole::Slave {
         master_host,
         master_port,
+        offset,
     } = server.role.clone()
     {
         tokio::spawn({
@@ -443,7 +467,7 @@ async fn main() {
                 while let Ok(bytes) = stream_read.read(&mut buf).await
                     && bytes > 0
                 {
-                    let tree = process_incoming_tcp_stream(
+                    let tree = cloned_server.process_incoming_tcp_stream(
                         &mut buf,
                         &mut read_index,
                         bytes,
@@ -515,7 +539,7 @@ async fn main() {
     loop {
         match listener.accept().await {
             Ok((stream, _)) => {
-                let cloned_server = server.clone_for_conn();
+                let mut cloned_server = server.clone_for_conn();
                 let cloned_replicas_tx = replicas_tx.clone();
                 tokio::spawn(async move {
                     let mut buf = [0; 1024];
@@ -567,8 +591,12 @@ async fn main() {
                     while let Ok(bytes) = stream_read.read(&mut buf[read_index..]).await
                         && bytes > 0
                     {
-                        let tree =
-                            process_incoming_tcp_stream(&mut buf, &mut read_index, bytes, false);
+                        let tree = cloned_server.process_incoming_tcp_stream(
+                            &mut buf,
+                            &mut read_index,
+                            bytes,
+                            false,
+                        );
                         for (node, command_string) in tree.into_iter() {
                             command_tx.send(node).await;
                             if let Some(cloned_replicas_tx) = cloned_replicas_tx.as_ref() {
