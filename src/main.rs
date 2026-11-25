@@ -441,10 +441,6 @@ async fn main() {
                 while let Ok(bytes) = stream.read(&mut buf).await
                     && bytes > 0
                 {
-                    println!(
-                        "bytes coming in for replica {:?}",
-                        String::from_utf8(buf.to_vec())
-                    );
                     let tree = process_incoming_tcp_stream(
                         &mut buf,
                         &mut read_index,
