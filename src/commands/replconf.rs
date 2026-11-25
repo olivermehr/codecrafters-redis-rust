@@ -26,7 +26,7 @@ impl RespServer {
             return Ok(CommandResponse::ReplicaResponse(Box::new(
                 CommandResponse::Single(format_array(&[
                     format_bulk_string(String::from("REPLCONF")),
-                    format_bulk_string(String::from("ACK")),
+                    format_bulk_string(String::from("GETACK")),
                     format_bulk_string(
                         (offset.load(std::sync::atomic::Ordering::Relaxed)).to_string(),
                     ),
