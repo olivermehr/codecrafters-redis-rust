@@ -223,16 +223,18 @@ impl RespServer {
     ) -> Vec<(RespNode, String)> {
         let mut parser = RespParser::new(&buf[..*read_index + bytes_read]);
         let (bytes_used, tree) = parser.create_tree(replica_handshake_mode);
-        match &mut self.role {
-            ServerRole::Slave {
-                master_host,
-                master_port,
-                offset,
-            } => {
-                offset.fetch_add(bytes_used, atomic::Ordering::Relaxed);
-            }
-            ServerRole::Master { replid, offset } => {
-                offset.fetch_add(bytes_used, atomic::Ordering::Relaxed);
+        if !replica_handshake_mode {
+            match &mut self.role {
+                ServerRole::Slave {
+                    master_host,
+                    master_port,
+                    offset,
+                } => {
+                    offset.fetch_add(bytes_used, atomic::Ordering::Relaxed);
+                }
+                ServerRole::Master { replid, offset } => {
+                    offset.fetch_add(bytes_used, atomic::Ordering::Relaxed);
+                }
             }
         }
         if bytes_used >= buf.len() {

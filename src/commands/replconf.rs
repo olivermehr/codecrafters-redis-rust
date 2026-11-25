@@ -16,7 +16,6 @@ impl RespServer {
                 offset,
             } = &self.role
         {
-            println!("we here");
             return Ok(CommandResponse::ReplicaResponse(Box::new(
                 CommandResponse::Single(format_array(&[
                     format_bulk_string(String::from("REPLCONF")),
