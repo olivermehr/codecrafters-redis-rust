@@ -118,7 +118,12 @@ impl<'a> RespParser<'a> {
                         && let Some(RespNode::BulkString(s)) = v.first()
                         && !UNREPLICATED_FNS.contains(&s.as_str())
                     {
-                        String::from_utf8(self.bytes[..self.pos].to_vec()).unwrap()
+                        let s = String::from_utf8(self.bytes[..self.pos].to_vec()).unwrap();
+                        println!(
+                            "inside create tree is the processed string being created {}",
+                            s
+                        );
+                        s
                     } else {
                         String::new()
                     };
