@@ -232,9 +232,7 @@ impl RespServer {
                 } => {
                     offset.fetch_add(bytes_used, atomic::Ordering::Relaxed);
                 }
-                ServerRole::Master { replid, offset } => {
-                    offset.fetch_add(bytes_used, atomic::Ordering::Relaxed);
-                }
+                ServerRole::Master { replid, offset } => {}
             }
         }
         if bytes_used >= buf.len() {
