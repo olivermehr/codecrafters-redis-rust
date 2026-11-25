@@ -447,7 +447,6 @@ async fn main() {
                         bytes,
                         !handshake_complete,
                     );
-                    println!("{:?}", tree);
                     if handshake_complete {
                         for (node, command_string) in tree {
                             cloned_server.visit(node).await.unwrap();
@@ -488,7 +487,6 @@ async fn main() {
                     let replicas = cs.replica_conns.read().await;
                     for r in replicas.iter() {
                         {
-                            println!(" in the replica send task {} {:?}", command, r);
                             r.lock()
                                 .await
                                 .write_all(&command.clone().into_bytes())
@@ -564,7 +562,6 @@ async fn main() {
 
                         for (node, command_string) in tree.into_iter() {
                             command_tx.send(node).await;
-                            println!("{:?}", cloned_replicas_tx);
                             if let Some(cloned_replicas_tx) = cloned_replicas_tx.as_ref() {
                                 cloned_replicas_tx.send(command_string).await;
                             }
