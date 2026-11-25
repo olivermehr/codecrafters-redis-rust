@@ -21,14 +21,7 @@ impl RespServer {
                     format_bulk_string(String::from("REPLCONF")),
                     format_bulk_string(String::from("ACK")),
                     format_bulk_string(
-                        (offset.load(std::sync::atomic::Ordering::Relaxed)
-                            - format_array(&[
-                                format_bulk_string(String::from("REPLCONF")),
-                                format_bulk_string(String::from("ACK")),
-                                format_bulk_string(String::from("*")),
-                            ])
-                            .len())
-                        .to_string(),
+                        (offset.load(std::sync::atomic::Ordering::Relaxed)).to_string(),
                     ),
                 ])),
             )));
