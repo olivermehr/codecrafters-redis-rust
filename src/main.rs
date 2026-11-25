@@ -571,9 +571,8 @@ async fn main() {
                     {
                         let tree =
                             process_incoming_tcp_stream(&mut buf, &mut read_index, bytes, false);
-
+                        println!("master {:?}", tree);
                         for (node, command_string) in tree.into_iter() {
-                            println!("master {:?} {}", node,command_string);
                             command_tx.send(node).await;
                             if let Some(cloned_replicas_tx) = cloned_replicas_tx.as_ref() {
                                 cloned_replicas_tx.send(command_string).await;
