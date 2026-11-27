@@ -203,6 +203,7 @@ pub enum CommandResponse {
     Multi(Vec<CommandResponse>),
     PromoteReplicaConn,
     ReplicaResponse(Box<CommandResponse>),
+    NoResponse,
 }
 
 static EMPTY_ARRAY: &[String; 0] = &[];
@@ -545,12 +546,10 @@ async fn main() {
                     for cmd_req in tree {
                         println!("received over the replica connection {:?}", cmd_req);
                         if let Some(ReplicaState::Ready) = cloned_server.get_replica_state() {
+                            let res = cloned_server.visit(cmd_req).await.unwrap();
                             // ADD incoming bytes to replica offset
                             offset.fetch_add(bytes, atomic::Ordering::Relaxed);
-
-                            if let CommandResponse::ReplicaResponse(inner) =
-                                cloned_server.visit(cmd_req).await.unwrap()
-                            {
+                            if let CommandResponse::ReplicaResponse(inner) = res {
                                 send_command_responses(&mut stream_write, *inner).await;
                             }
                         } else {
@@ -715,6 +714,7 @@ async fn send_command_responses(
         CommandResponse::ReplicaResponse(r) => {
             Box::pin(send_command_responses(stream_writer, *r)).await
         }
+        CommandResponse::NoResponse => false,
     }
 }
 

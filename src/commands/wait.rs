@@ -41,8 +41,7 @@ impl RespServer {
                     format_bulk_string(String::from("*")),
                 ]);
                 // get current offset and increment by the repl conf
-                let current_offset = master_offset
-                    .fetch_add(response_string.len(), std::sync::atomic::Ordering::Relaxed);
+                let current_offset = master_offset.load(std::sync::atomic::Ordering::Relaxed);
                 println!("wait command current offset {}", current_offset);
                 self.replicate_command(response_string).await;
 

@@ -58,9 +58,11 @@ impl RespServer {
                 .last_offset
                 .swap(offset, std::sync::atomic::Ordering::Relaxed);
             ack_notifier.notify_waiters();
+            Ok(CommandResponse::NoResponse)
+        } else {
+            Ok(CommandResponse::Single(format_simple_string(String::from(
+                "OK",
+            ))))
         }
-        Ok(CommandResponse::Single(format_simple_string(String::from(
-            "OK",
-        ))))
     }
 }
