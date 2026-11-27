@@ -37,7 +37,8 @@ impl RespServer {
                     .unwrap();
             }
         }
-        self.replicate_command(cmd_string);
+
+        self.replicate_command(cmd_string).await;
         let mut lock = self.storage.lock().unwrap();
         match lock.get_mut(&key) {
             Some(val) => {

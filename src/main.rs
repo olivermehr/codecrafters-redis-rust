@@ -267,10 +267,14 @@ impl RespServer {
         } = &self.role
         {
             master_offset.fetch_add(cmd_string.len(), atomic::Ordering::Relaxed);
-            let replica_lock = replicas.lock().unwrap();
-            for r in replica_lock.values() {
-                r.propagation_tx
-                    .send(Ok(CommandResponse::Single(cmd_string.clone())))
+            let replica_txs: Vec<Sender<Result<CommandResponse, RespError>>> = replicas
+                .lock()
+                .unwrap()
+                .values()
+                .map(|r| r.propagation_tx.clone())
+                .collect();
+            for r in replica_txs {
+                r.send(Ok(CommandResponse::Single(cmd_string.clone())))
                     .await
                     .unwrap();
             }
@@ -537,7 +541,7 @@ async fn main() {
                     let tree =
                         cloned_server.process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
                     for cmd_req in tree {
-                        println!("received over the replica connection {:?}",cmd_req);
+                        println!("received over the replica connection {:?}", cmd_req);
                         if let Some(ReplicaState::Ready) = cloned_server.get_replica_state() {
                             // ADD incoming bytes to replica offset
                             offset.fetch_add(bytes, atomic::Ordering::Relaxed);
@@ -598,7 +602,6 @@ async fn main() {
                             while let Some(res) = tcp_channel_rx.recv().await {
                                 match res {
                                     Ok(response) => {
-                                        println!("command responses {:?}", response);
                                         if send_command_responses(&mut stream_write, response).await
                                             && let ServerRole::Master {
                                                 replid,

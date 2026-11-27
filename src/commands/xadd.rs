@@ -25,7 +25,7 @@ impl RespServer {
             let value = get_bulk_string_arg(args.next())?;
             kp_vec.push((key, value));
         }
-        self.replicate_command(cmd_string);
+        self.replicate_command(cmd_string).await;
         let mut lock = self.storage.lock().unwrap();
         let stream = lock
             .entry(stream_key.clone())

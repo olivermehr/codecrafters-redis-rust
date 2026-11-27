@@ -43,8 +43,7 @@ impl RespServer {
                 // get current offset and increment by the repl conf
                 let current_offset = master_offset
                     .fetch_add(response_string.len(), std::sync::atomic::Ordering::Relaxed);
-                {
-                    // scope to ensure replica lock goes out of scope
+                
                     let replica_txs: Vec<Sender<Result<CommandResponse, RespError>>> = replicas
                         .lock()
                         .unwrap()
@@ -56,7 +55,7 @@ impl RespServer {
                         r.send(Ok(CommandResponse::Single(response_string.clone())))
                             .await;
                     }
-                }
+                
                 let mut replicas_acked = 0;
 
                 let notify_loop = async {

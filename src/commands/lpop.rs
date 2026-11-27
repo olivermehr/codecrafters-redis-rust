@@ -18,12 +18,12 @@ impl RespServer {
         let pop_num: usize = get_bulk_string_arg_optional(args.next())
             .map(|p| p.parse().unwrap())
             .unwrap_or(1);
+        self.replicate_command(cmd_string).await;
         let mut map = self.storage.lock().unwrap();
         let storage = map.get_mut(&list_name);
         if let Some(storage) = storage
             && let StorageType::List(l) = &mut storage.content
         {
-            self.replicate_command(cmd_string);
             let pop_num = if pop_num >= l.len() { l.len() } else { pop_num };
             let mut items = Vec::new();
             if pop_num == 0 {

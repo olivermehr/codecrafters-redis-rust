@@ -24,7 +24,7 @@ impl RespServer {
         match front_pop {
             Some(el) => {
                 // replicate lpop
-                self.replicate_command(adjusted_cmd_str);
+                self.replicate_command(adjusted_cmd_str).await;
                 Ok(CommandResponse::Single(format_array(&[
                     format_bulk_string(list_name),
                     format_bulk_string(el.into()),
@@ -41,7 +41,7 @@ impl RespServer {
                     .push_back(tx);
                 if timeout == 0.0 {
                     let value = rx.await.unwrap();
-                    self.replicate_command(adjusted_cmd_str);
+                    self.replicate_command(adjusted_cmd_str).await;
                     Ok(CommandResponse::Single(format_array(&[
                         format_bulk_string(list_name),
                         format_bulk_string(value.into()),
@@ -56,7 +56,7 @@ impl RespServer {
                         }
                          msg = rx => {
                             let value = msg.unwrap();
-                            self.replicate_command(adjusted_cmd_str);
+                            self.replicate_command(adjusted_cmd_str).await;
                             Ok(CommandResponse::Single(format_array(&[
                         format_bulk_string(list_name),
                         format_bulk_string(value.into()),

@@ -14,8 +14,8 @@ impl RespServer {
         }: CommandFnArgs,
     ) -> Result<CommandResponse, RespError> {
         let key_name = get_bulk_string_arg(args.next())?;
+        self.replicate_command(cmd_string).await;
         let mut lock = self.storage.lock().unwrap();
-
         match lock.get_mut(&key_name) {
             Some(val) => {
                 if let StorageType::String(s) = &mut val.content {
@@ -24,7 +24,6 @@ impl RespServer {
                         Ok(mut n) => {
                             n += 1;
                             *s = n.to_string();
-                            self.replicate_command(cmd_string);
                             return Ok(CommandResponse::Single(format_integer_string(n as isize)));
                         }
                         Err(e) => {
