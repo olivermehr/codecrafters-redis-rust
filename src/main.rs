@@ -537,6 +537,7 @@ async fn main() {
                     let tree =
                         cloned_server.process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
                     for cmd_req in tree {
+                        println!("received over the replica connection {:?}",cmd_req);
                         if let Some(ReplicaState::Ready) = cloned_server.get_replica_state() {
                             // ADD incoming bytes to replica offset
                             offset.fetch_add(bytes, atomic::Ordering::Relaxed);
