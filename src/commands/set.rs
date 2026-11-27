@@ -46,7 +46,7 @@ impl RespServer {
                 connected_slaves,
                 replicas,
                 ack_notifier,
-            } = self.role
+            } = &self.role
             {
                 "master"
             } else {
