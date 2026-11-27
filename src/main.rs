@@ -271,7 +271,8 @@ impl RespServer {
             for r in replica_lock.values() {
                 r.propagation_tx
                     .send(Ok(CommandResponse::Single(cmd_string.clone())))
-                    .await;
+                    .await
+                    .unwrap();
             }
         }
     }
