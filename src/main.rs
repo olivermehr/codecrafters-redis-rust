@@ -288,11 +288,11 @@ impl RespServer {
             offset,
             state,
         } = &self.role
-            && let ReplicaState::Ready = state.as_ref()
+            && !matches!(state.as_ref(), ReplicaState::Ready)
         {
-            false
-        } else {
             true
+        } else {
+            false
         };
         let (bytes_used, tree) = parser.create_tree(replica_handshake);
         if bytes_used >= buf.len() {
