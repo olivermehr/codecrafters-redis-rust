@@ -37,22 +37,6 @@ impl RespServer {
                     .unwrap();
             }
         }
-        println!(
-            "cmd string {} on {}",
-            cmd_string,
-            if let ServerRole::Master {
-                replid,
-                master_offset,
-                connected_slaves,
-                replicas,
-                ack_notifier,
-            } = &self.role
-            {
-                "master"
-            } else {
-                "replica"
-            }
-        );
         self.replicate_command(cmd_string).await;
         let mut lock = self.storage.lock().unwrap();
         match lock.get_mut(&key) {
@@ -63,6 +47,24 @@ impl RespServer {
                 lock.insert(key.clone(), Storage::new(value.into()));
             }
         }
+        drop(lock);
+
+        println!(
+            "storage state {:?} on {}",
+            self.storage.lock().unwrap(),
+            if let ServerRole::Master {
+                replid,
+                master_offset,
+                connected_slaves,
+                replicas,
+                ack_notifier,
+            } = &self.role
+            {
+                "master"
+            } else {
+                "slave"
+            }
+        );
         for all_watched_keys in self.watched_keys.lock().unwrap().values_mut() {
             for (wk, status) in all_watched_keys.iter_mut() {
                 if *wk == key {

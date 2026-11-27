@@ -54,7 +54,7 @@ struct Replica {
     ack_notifier: Arc<Notify>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 enum ReplicaState {
     InitHandshake,
     ProcessRdb,
@@ -74,7 +74,7 @@ enum ServerRole {
         master_host: String,
         master_port: String,
         offset: Arc<AtomicUsize>,
-        state: Arc<ReplicaState>,
+        state: Arc<Mutex<ReplicaState>>,
     },
 }
 
@@ -244,7 +244,7 @@ impl RespServer {
         }
     }
 
-    fn get_replica_state(&self) -> Option<&ReplicaState> {
+    fn get_replica_state(&self) -> Option<ReplicaState> {
         if let ServerRole::Slave {
             master_host,
             master_port,
@@ -252,7 +252,7 @@ impl RespServer {
             state,
         } = &self.role
         {
-            return Some(state);
+            return Some(*state.lock().unwrap());
         }
         None
     }
@@ -294,12 +294,13 @@ impl RespServer {
             offset,
             state,
         } = &self.role
-            && !matches!(state.as_ref(), ReplicaState::Ready)
+            && !matches!(*state.lock().unwrap(), ReplicaState::Ready)
         {
             true
         } else {
             false
         };
+
         let (bytes_used, tree) = parser.create_tree(replica_handshake);
         if bytes_used >= buf.len() {
             buf.fill(0);
@@ -334,7 +335,9 @@ impl RespServer {
         }
 
         let mut cmd_fn_args: CommandFnArgs = command.into();
-        let fn_name = get_bulk_string_arg(cmd_fn_args.args.next())?;
+        println!("{cmd_fn_args:?}");
+        let fn_name = get_bulk_string_arg(cmd_fn_args.args.next())?.to_lowercase();
+        println!("fn name {}", fn_name);
         let command_fn = commands::COMMANDS
             .get(fn_name.as_str())
             .expect("unsupported fn name");
@@ -477,7 +480,7 @@ async fn main() {
             master_host: host.to_string(),
             master_port: port.to_string(),
             offset: Arc::new(atomic::AtomicUsize::new(0)),
-            state: Arc::new(ReplicaState::InitHandshake),
+            state: Arc::new(Mutex::new(ReplicaState::InitHandshake)),
         }
     } else {
         let replid = String::from_utf8(rng().sample_iter(Alphanumeric).take(40).collect()).unwrap();
@@ -570,7 +573,7 @@ async fn main() {
                                     state,
                                 } = &mut cloned_server.role
                             {
-                                *state = ReplicaState::Ready.into()
+                                *state.lock().unwrap() = ReplicaState::Ready;
                             }
                         }
                     }

@@ -8,10 +8,12 @@ impl RespServer {
         &mut self,
         CommandFnArgs {
             mut args,
-            cmd_string: _,
+            cmd_string,
         }: CommandFnArgs,
     ) -> Result<CommandResponse, RespError> {
+        println!("{cmd_string}");
         let key = get_bulk_string_arg(args.next())?;
+        println!("key {key}");
         let value = self
             .storage
             .lock()

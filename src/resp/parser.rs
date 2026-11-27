@@ -103,7 +103,10 @@ impl<'a> RespParser<'a> {
         Ok(v)
     }
 
-    pub fn create_tree(&mut self, replica_handshake_mode: bool) -> (usize, Vec<CommandRequest>) {
+    pub fn create_tree(
+        &mut self,
+        mut replica_handshake_mode: bool,
+    ) -> (usize, Vec<CommandRequest>) {
         let mut v = Vec::new();
         let mut bytes_used = 0;
         if self.pos >= self.len {
@@ -111,11 +114,11 @@ impl<'a> RespParser<'a> {
         }
         self.current_byte = Some(self.bytes[self.pos]);
         while self.pos < self.len {
-            let node = self.get_next_node(replica_handshake_mode);
+            let node = self.get_next_node(&mut replica_handshake_mode);
             match node {
                 Ok(n) => {
                     let command_string =
-                        String::from_utf8(self.bytes[..self.pos].to_vec()).unwrap();
+                        String::from_utf8(self.bytes[..self.pos].to_vec()).unwrap_or_default();
                     v.push(CommandRequest {
                         node: n,
                         command_string,
@@ -142,7 +145,7 @@ impl<'a> RespParser<'a> {
         Ok(())
     }
 
-    fn get_next_node(&mut self, replica_handshake_mode: bool) -> Result<RespNode, RespError> {
+    fn get_next_node(&mut self, replica_handshake_mode: &mut bool) -> Result<RespNode, RespError> {
         let byte = self.current_byte.ok_or(RespError::IncompleteTcpStream)?;
         if byte == b'*' {
             self.advance();
@@ -158,8 +161,9 @@ impl<'a> RespParser<'a> {
             self.advance();
             let l = self.integer()?;
             self.crlf()?;
-            if replica_handshake_mode {
+            if *replica_handshake_mode {
                 let rdb_file = self.rdb_file(l)?;
+                *replica_handshake_mode = false;
                 Ok(RdbFile(rdb_file))
             } else {
                 let s = self.bulk_string(l)?;
