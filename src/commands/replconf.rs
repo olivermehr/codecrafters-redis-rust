@@ -46,6 +46,10 @@ impl RespServer {
             } = &self.role
         {
             let offset: usize = get_bulk_string_arg(args.next())?.parse().unwrap();
+            println!(
+                "received offset from conn index {} with offset {}",
+                self.connection_no, offset
+            );
             replicas
                 .lock()
                 .unwrap()
