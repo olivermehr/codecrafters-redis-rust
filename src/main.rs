@@ -257,7 +257,7 @@ impl RespServer {
         None
     }
 
-    fn replicate_command(&self, cmd_string: String) {
+    async fn replicate_command(&self, cmd_string: String) {
         if let ServerRole::Master {
             replid,
             master_offset,
@@ -270,7 +270,8 @@ impl RespServer {
             let replica_lock = replicas.lock().unwrap();
             for r in replica_lock.values() {
                 r.propagation_tx
-                    .send(Ok(CommandResponse::Single(cmd_string.clone())));
+                    .send(Ok(CommandResponse::Single(cmd_string.clone())))
+                    .await;
             }
         }
     }
