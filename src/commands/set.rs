@@ -1,6 +1,6 @@
 use super::{Expiry, RespError, RespServer};
-use crate::CommandResponse;
 use crate::commands::CommandFnArgs;
+use crate::{CommandResponse, ServerRole};
 use crate::{
     Storage, StorageType, format_simple_string, get_bulk_string_arg, get_bulk_string_arg_optional,
 };
@@ -37,7 +37,22 @@ impl RespServer {
                     .unwrap();
             }
         }
-
+        println!(
+            "cmd string {} on {}",
+            cmd_string,
+            if let ServerRole::Master {
+                replid,
+                master_offset,
+                connected_slaves,
+                replicas,
+                ack_notifier,
+            } = self.role
+            {
+                "master"
+            } else {
+                "replica"
+            }
+        );
         self.replicate_command(cmd_string).await;
         let mut lock = self.storage.lock().unwrap();
         match lock.get_mut(&key) {
