@@ -43,19 +43,9 @@ impl RespServer {
                 // get current offset and increment by the repl conf
                 let current_offset = master_offset
                     .fetch_add(response_string.len(), std::sync::atomic::Ordering::Relaxed);
-                
-                    let replica_txs: Vec<Sender<Result<CommandResponse, RespError>>> = replicas
-                        .lock()
-                        .unwrap()
-                        .values()
-                        .map(|r| r.propagation_tx.clone())
-                        .collect();
+                println!("wait command current offset {}",current_offset);
+                self.replicate_command(response_string).await;
 
-                    for r in replica_txs {
-                        r.send(Ok(CommandResponse::Single(response_string.clone())))
-                            .await;
-                    }
-                
                 let mut replicas_acked = 0;
 
                 let notify_loop = async {
