@@ -536,25 +536,18 @@ async fn main() {
                 {
                     let tree =
                         cloned_server.process_incoming_tcp_stream(&mut buf, &mut read_index, bytes);
+                    for cmd_req in tree {
+                        if let Some(ReplicaState::Ready) = cloned_server.get_replica_state() {
+                            // ADD incoming bytes to replica offset
+                            offset.fetch_add(bytes, atomic::Ordering::Relaxed);
 
-                    if let Some(ReplicaState::Ready) = cloned_server.get_replica_state() {
-                        // ADD incoming bytes to replica offset
-                        offset.fetch_add(bytes, atomic::Ordering::Relaxed);
-                        for cmd_req in tree {
                             if let CommandResponse::ReplicaResponse(inner) =
                                 cloned_server.visit(cmd_req).await.unwrap()
                             {
                                 send_command_responses(&mut stream_write, *inner).await;
                             }
-                        }
-                    } else {
-                        for CommandRequest {
-                            node,
-                            command_string,
-                        } in tree
-                        {
-                            if let RespNode::SimpleString(s) = node {
-                                let s = s.to_lowercase();
+                        } else {
+                            if let RespNode::SimpleString(s) = cmd_req.node {
                                 if s.eq_ignore_ascii_case("ok")
                                     || s.eq_ignore_ascii_case("pong")
                                         && !replication_init.is_empty()
@@ -565,7 +558,7 @@ async fn main() {
                                         )
                                         .await;
                                 }
-                            } else if let RdbFile(v) = node
+                            } else if let RdbFile(v) = cmd_req.node
                                 && let ServerRole::Slave {
                                     master_host,
                                     master_port,
@@ -604,6 +597,7 @@ async fn main() {
                             while let Some(res) = tcp_channel_rx.recv().await {
                                 match res {
                                     Ok(response) => {
+                                        println!("command responses {:?}", response);
                                         if send_command_responses(&mut stream_write, response).await
                                             && let ServerRole::Master {
                                                 replid,
