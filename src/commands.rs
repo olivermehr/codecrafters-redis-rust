@@ -4,7 +4,7 @@ use futures::future::BoxFuture;
 use tokio::sync::mpsc::Sender;
 
 use crate::{
-    CommandResponse, Expiry, RespServer,
+    CommandRequest, CommandResponse, Expiry, RespServer,
     resp::{error::RespError, parser::RespNode},
 };
 
@@ -33,10 +33,26 @@ mod xadd;
 mod xrange;
 mod xread;
 
-type CommandArgs = IntoIter<RespNode>;
+pub struct CommandFnArgs {
+    pub args: IntoIter<RespNode>,
+    pub cmd_string: String,
+}
+
+impl From<CommandRequest> for CommandFnArgs {
+    fn from(value: CommandRequest) -> Self {
+        if let RespNode::Array(v) = value.node {
+            return Self {
+                args: v.into_iter(),
+                cmd_string: value.command_string,
+            };
+        }
+        panic!("Command request must be an array node")
+    }
+}
+
 type CommandFn = for<'a> fn(
     &'a mut RespServer,
-    CommandArgs,
+    CommandFnArgs,
 ) -> BoxFuture<'a, Result<CommandResponse, RespError>>;
 
 pub(crate) static COMMANDS: LazyLock<HashMap<&'static str, CommandFn>> = LazyLock::new(|| {
@@ -56,11 +72,11 @@ pub(crate) static COMMANDS: LazyLock<HashMap<&'static str, CommandFn>> = LazyLoc
         ("xrange", |server, args| Box::pin(server.xrange(args))),
         ("xread", |server, args| Box::pin(server.xread(args))),
         ("incr", |server, args| Box::pin(server.incr(args))),
-        ("multi", |server, args| Box::pin(server.multi())),
-        ("exec", |server, args| Box::pin(server.exec())),
-        ("discard", |server, args| Box::pin(server.discard())),
+        ("multi", |server, _args| Box::pin(server.multi())),
+        ("exec", |server, _args| Box::pin(server.exec())),
+        ("discard", |server, _args| Box::pin(server.discard())),
         ("watch", |server, args| Box::pin(server.watch(args))),
-        ("unwatch", |server, args| Box::pin(server.unwatch())),
+        ("unwatch", |server, _args| Box::pin(server.unwatch())),
         ("info", |server, args| Box::pin(server.info(args))),
         ("replconf", |server, args| Box::pin(server.replconf(args))),
         ("psync", |server, args| Box::pin(server.psync(args))),

@@ -1,20 +1,27 @@
-use crate::CommandResponse;
+use crate::{CommandResponse, commands::CommandFnArgs};
 use std::collections::HashSet;
 
 use crate::{
-    RespServer, ServerRole, Storage, StorageType, commands::CommandArgs, format_array,
-    format_error_string, format_integer_string, format_simple_string, get_bulk_string_arg,
-    resp::error::RespError,
+    RespServer, ServerRole, Storage, StorageType, format_array, format_error_string,
+    format_integer_string, format_simple_string, get_bulk_string_arg, resp::error::RespError,
 };
 
 impl RespServer {
-    pub async fn psync(&mut self, mut v: CommandArgs) -> Result<CommandResponse, RespError> {
-        let slave_replicaton_id = get_bulk_string_arg(v.next())?;
-        let slave_offset = get_bulk_string_arg(v.next())?;
+    pub async fn psync(
+        &mut self,
+        CommandFnArgs {
+            mut args,
+            cmd_string,
+        }: CommandFnArgs,
+    ) -> Result<CommandResponse, RespError> {
+        let slave_replicaton_id = get_bulk_string_arg(args.next())?;
+        let slave_offset = get_bulk_string_arg(args.next())?;
         if let ServerRole::Master {
             replid,
-            offset,
+            master_offset: offset,
             connected_slaves,
+            replicas,
+            ack_notifier,
         } = &mut self.role
             && slave_replicaton_id == "?"
             && slave_offset == "-1"

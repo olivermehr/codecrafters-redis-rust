@@ -1,8 +1,11 @@
 use std::rc::Rc;
 
-use crate::resp::{
-    error::RespError,
-    parser::RespNode::{BulkString, RdbFile},
+use crate::{
+    CommandRequest,
+    resp::{
+        error::RespError,
+        parser::RespNode::{BulkString, RdbFile},
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -100,10 +103,7 @@ impl<'a> RespParser<'a> {
         Ok(v)
     }
 
-    pub fn create_tree(
-        &mut self,
-        replica_handshake_mode: bool,
-    ) -> (usize, Vec<(RespNode, String)>) {
+    pub fn create_tree(&mut self, replica_handshake_mode: bool) -> (usize, Vec<CommandRequest>) {
         let mut v = Vec::new();
         let mut bytes_used = 0;
         if self.pos >= self.len {
@@ -114,16 +114,12 @@ impl<'a> RespParser<'a> {
             let node = self.get_next_node(replica_handshake_mode);
             match node {
                 Ok(n) => {
-                    let replicated_string = if let RespNode::Array(v) = &n
-                        && let Some(RespNode::BulkString(s)) = v.first()
-                        && !UNREPLICATED_FNS.contains(&s.as_str())
-                    {
-                        let s = String::from_utf8(self.bytes[..self.pos].to_vec()).unwrap();
-                        s
-                    } else {
-                        String::new()
-                    };
-                    v.push((n, replicated_string));
+                    let command_string =
+                        String::from_utf8(self.bytes[..self.pos].to_vec()).unwrap();
+                    v.push(CommandRequest {
+                        node: n,
+                        command_string,
+                    });
                     bytes_used = self.pos;
                 }
                 Err(e) => {}

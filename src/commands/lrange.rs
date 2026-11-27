@@ -1,14 +1,22 @@
+use super::{RespError, RespServer};
 use crate::CommandResponse;
-use super::{CommandArgs, RespError, RespServer};
+use crate::commands::CommandFnArgs;
 use crate::{
-    StorageType, EMPTY_ARRAY, format_bulk_string, get_bulk_string_arg, format_array, normalise_lrange_indices,
+    EMPTY_ARRAY, StorageType, format_array, format_bulk_string, get_bulk_string_arg,
+    normalise_lrange_indices,
 };
 
 impl RespServer {
-    pub(crate) async fn lrange(&mut self, mut v: CommandArgs) -> Result<CommandResponse, RespError> {
-        let list_name = get_bulk_string_arg(v.next())?;
-        let start_index: isize = get_bulk_string_arg(v.next())?.parse().unwrap();
-        let stop_index: isize = get_bulk_string_arg(v.next())?.parse().unwrap();
+    pub(crate) async fn lrange(
+        &mut self,
+        CommandFnArgs {
+            mut args,
+            cmd_string,
+        }: CommandFnArgs,
+    ) -> Result<CommandResponse, RespError> {
+        let list_name = get_bulk_string_arg(args.next())?;
+        let start_index: isize = get_bulk_string_arg(args.next())?.parse().unwrap();
+        let stop_index: isize = get_bulk_string_arg(args.next())?.parse().unwrap();
         let lock = self.storage.lock().unwrap();
         let storage = lock.get(&list_name);
         if let Some(storage) = storage

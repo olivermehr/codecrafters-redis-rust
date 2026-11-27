@@ -1,23 +1,31 @@
+use super::{RespError, RespServer};
 use crate::CommandResponse;
-use super::{CommandArgs, RespError, RespServer};
+use crate::commands::CommandFnArgs;
 use crate::{
     Storage, StorageType, StreamEntries, format_bulk_string, format_error_string,
     get_bulk_string_arg,
 };
 
 impl RespServer {
-    pub(crate) async fn xadd(&mut self, mut v: CommandArgs) -> Result<CommandResponse, RespError> {
-        let stream_key = get_bulk_string_arg(v.next())?;
-        let mut id = get_bulk_string_arg(v.next())?;
+    pub(crate) async fn xadd(
+        &mut self,
+        CommandFnArgs {
+            mut args,
+            cmd_string,
+        }: CommandFnArgs,
+    ) -> Result<CommandResponse, RespError> {
+        let stream_key = get_bulk_string_arg(args.next())?;
+        let mut id = get_bulk_string_arg(args.next())?;
         match self.validate_stream_id(&stream_key, id) {
             Ok(processed_id) => id = processed_id,
             Err(s) => return Ok(CommandResponse::Single(format_error_string(&s))),
         }
         let mut kp_vec = Vec::new();
-        while let Ok(key) = get_bulk_string_arg(v.next()) {
-            let value = get_bulk_string_arg(v.next())?;
+        while let Ok(key) = get_bulk_string_arg(args.next()) {
+            let value = get_bulk_string_arg(args.next())?;
             kp_vec.push((key, value));
         }
+        self.replicate_command(cmd_string);
         let mut lock = self.storage.lock().unwrap();
         let stream = lock
             .entry(stream_key.clone())

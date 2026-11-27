@@ -1,12 +1,19 @@
+use super::{RespError, RespServer};
 use crate::CommandResponse;
-use super::{CommandArgs, RespError, RespServer};
-use crate::{StorageType, EMPTY_ARRAY, get_bulk_string_arg, format_array, format_stream_entries};
+use crate::commands::CommandFnArgs;
+use crate::{EMPTY_ARRAY, StorageType, format_array, format_stream_entries, get_bulk_string_arg};
 
 impl RespServer {
-    pub(crate) async fn xrange(&mut self, mut v: CommandArgs) -> Result<CommandResponse, RespError> {
-        let stream_key = get_bulk_string_arg(v.next())?;
-        let mut start_index = get_bulk_string_arg(v.next())?;
-        let mut stop_index = get_bulk_string_arg(v.next())?;
+    pub(crate) async fn xrange(
+        &mut self,
+        CommandFnArgs {
+            mut args,
+            cmd_string,
+        }: CommandFnArgs,
+    ) -> Result<CommandResponse, RespError> {
+        let stream_key = get_bulk_string_arg(args.next())?;
+        let mut start_index = get_bulk_string_arg(args.next())?;
+        let mut stop_index = get_bulk_string_arg(args.next())?;
         let lock = self.storage.lock().unwrap();
         let storage = lock.get(&stream_key);
         if let Some(storage) = storage
@@ -50,7 +57,9 @@ impl RespServer {
             let stop_index = v
                 .binary_search_by_key(&stop_index.as_str(), |entry| entry.id.as_str())
                 .unwrap();
-            return Ok(CommandResponse::Single(format_stream_entries(&v[start_index..=stop_index])));
+            return Ok(CommandResponse::Single(format_stream_entries(
+                &v[start_index..=stop_index],
+            )));
         }
         Ok(CommandResponse::Single(format_array(EMPTY_ARRAY)))
     }

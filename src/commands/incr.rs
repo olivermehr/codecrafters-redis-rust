@@ -1,12 +1,19 @@
 use crate::CommandResponse;
+use crate::commands::CommandFnArgs;
 use crate::{
-    RespServer, Storage, StorageType, commands::CommandArgs, format_error_string,
-    format_integer_string, get_bulk_string_arg, resp::error::RespError,
+    RespServer, Storage, StorageType, format_error_string, format_integer_string,
+    get_bulk_string_arg, resp::error::RespError,
 };
 
 impl RespServer {
-    pub async fn incr(&mut self, mut v: CommandArgs) -> Result<CommandResponse, RespError> {
-        let key_name = get_bulk_string_arg(v.next())?;
+    pub async fn incr(
+        &mut self,
+        CommandFnArgs {
+            mut args,
+            cmd_string,
+        }: CommandFnArgs,
+    ) -> Result<CommandResponse, RespError> {
+        let key_name = get_bulk_string_arg(args.next())?;
         let mut lock = self.storage.lock().unwrap();
 
         match lock.get_mut(&key_name) {
@@ -17,6 +24,7 @@ impl RespServer {
                         Ok(mut n) => {
                             n += 1;
                             *s = n.to_string();
+                            self.replicate_command(cmd_string);
                             return Ok(CommandResponse::Single(format_integer_string(n as isize)));
                         }
                         Err(e) => {

@@ -1,13 +1,21 @@
+use super::{RespError, RespServer};
 use crate::CommandResponse;
-use super::{CommandArgs, RespError, RespServer};
+use crate::commands::CommandFnArgs;
 use crate::{
-    StorageType, format_bulk_string, format_null_string, get_bulk_string_arg, get_bulk_string_arg_optional, format_array,
+    StorageType, format_array, format_bulk_string, format_null_string, get_bulk_string_arg,
+    get_bulk_string_arg_optional,
 };
 
 impl RespServer {
-    pub(crate) async fn lpop(&mut self, mut v: CommandArgs) -> Result<CommandResponse, RespError> {
-        let list_name = get_bulk_string_arg(v.next())?;
-        let pop_num: usize = get_bulk_string_arg_optional(v.next())
+    pub(crate) async fn lpop(
+        &mut self,
+        CommandFnArgs {
+            mut args,
+            cmd_string,
+        }: CommandFnArgs,
+    ) -> Result<CommandResponse, RespError> {
+        let list_name = get_bulk_string_arg(args.next())?;
+        let pop_num: usize = get_bulk_string_arg_optional(args.next())
             .map(|p| p.parse().unwrap())
             .unwrap_or(1);
         let mut map = self.storage.lock().unwrap();
@@ -15,6 +23,7 @@ impl RespServer {
         if let Some(storage) = storage
             && let StorageType::List(l) = &mut storage.content
         {
+            self.replicate_command(cmd_string);
             let pop_num = if pop_num >= l.len() { l.len() } else { pop_num };
             let mut items = Vec::new();
             if pop_num == 0 {

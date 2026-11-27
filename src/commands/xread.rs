@@ -1,5 +1,6 @@
+use super::{RespError, RespServer};
 use crate::CommandResponse;
-use super::{CommandArgs, RespError, RespServer};
+use crate::commands::CommandFnArgs;
 use crate::{
     StorageType, format_array, format_bulk_string, format_null_array, format_stream_entries,
     get_bulk_string_arg,
@@ -9,9 +10,15 @@ use std::time::Duration;
 use tokio::sync::oneshot;
 
 impl RespServer {
-    pub(crate) async fn xread(&mut self, mut v: CommandArgs) -> Result<CommandResponse, RespError> {
+    pub(crate) async fn xread(
+        &mut self,
+        CommandFnArgs {
+            mut args,
+            cmd_string,
+        }: CommandFnArgs,
+    ) -> Result<CommandResponse, RespError> {
         let mut param_vec = Vec::new();
-        while let Ok(p) = get_bulk_string_arg(v.next()) {
+        while let Ok(p) = get_bulk_string_arg(args.next()) {
             param_vec.push(p)
         }
         let mut block: Option<usize> = None;
