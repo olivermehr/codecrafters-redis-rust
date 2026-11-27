@@ -33,6 +33,7 @@ mod xadd;
 mod xrange;
 mod xread;
 
+#[derive(Debug)]
 pub struct CommandFnArgs {
     pub args: IntoIter<RespNode>,
     pub cmd_string: String,

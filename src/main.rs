@@ -328,6 +328,7 @@ impl RespServer {
         }
 
         let mut cmd_fn_args: CommandFnArgs = command.into();
+        println!("{}", cmd_fn_args);
         let fn_name = get_bulk_string_arg(cmd_fn_args.args.next())?;
         let command_fn = commands::COMMANDS
             .get(fn_name.as_str())
