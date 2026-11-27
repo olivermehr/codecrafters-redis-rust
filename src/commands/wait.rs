@@ -43,7 +43,7 @@ impl RespServer {
                 // get current offset and increment by the repl conf
                 let current_offset = master_offset
                     .fetch_add(response_string.len(), std::sync::atomic::Ordering::Relaxed);
-                println!("wait command current offset {}",current_offset);
+                println!("wait command current offset {}", current_offset);
                 self.replicate_command(response_string).await;
 
                 let mut replicas_acked = 0;
@@ -80,6 +80,10 @@ fn check_replica_offset(
 ) -> usize {
     let mut count = 0;
     replicas.lock().unwrap().values().for_each(|r| {
+        println!(
+            "offset of replica {}",
+            r.last_offset.load(std::sync::atomic::Ordering::Relaxed)
+        );
         if r.last_offset.load(std::sync::atomic::Ordering::Relaxed) >= target_offset {
             count += 1;
         }
