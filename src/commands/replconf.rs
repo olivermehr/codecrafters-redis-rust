@@ -29,7 +29,7 @@ impl RespServer {
                     format_bulk_string(String::from("ACK")),
                     format_bulk_string(
                         offset
-                            .fetch_add(cmd_string.len(), std::sync::atomic::Ordering::Relaxed)
+                            .load(std::sync::atomic::Ordering::Relaxed)
                             .to_string(),
                     ),
                 ])),

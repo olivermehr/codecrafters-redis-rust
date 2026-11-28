@@ -549,7 +549,6 @@ async fn main() {
                             let res = cloned_server.visit(cmd_req).await.unwrap();
                             // ADD incoming bytes to replica offset
                             let num = offset.fetch_add(bytes, atomic::Ordering::Relaxed);
-                            println!("{num}");
                             if let CommandResponse::ReplicaResponse(inner) = res {
                                 send_command_responses(&mut stream_write, *inner).await;
                             }
