@@ -23,7 +23,7 @@ impl RespServer {
                 state,
             } = &self.role
         {
-            let response = Ok(CommandResponse::ReplicaResponse(Box::new(
+            Ok(CommandResponse::ReplicaResponse(Box::new(
                 CommandResponse::Single(format_array(&[
                     format_bulk_string(String::from("REPLCONF")),
                     format_bulk_string(String::from("ACK")),
@@ -33,9 +33,7 @@ impl RespServer {
                             .to_string(),
                     ),
                 ])),
-            )));
-
-            return response;
+            )))
         } else if arg.eq_ignore_ascii_case("ack")
             && let ServerRole::Master {
                 replid,

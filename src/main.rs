@@ -546,9 +546,10 @@ async fn main() {
                     for cmd_req in tree {
                         println!("received over the replica connection {:?}", cmd_req);
                         if let Some(ReplicaState::Ready) = cloned_server.get_replica_state() {
+                            let cmd_len = cmd_req.command_string.len();
                             let res = cloned_server.visit(cmd_req).await.unwrap();
                             // ADD incoming bytes to replica offset
-                            let num = offset.fetch_add(bytes, atomic::Ordering::Relaxed);
+                            offset.fetch_add(cmd_len, atomic::Ordering::Relaxed);
                             if let CommandResponse::ReplicaResponse(inner) = res {
                                 send_command_responses(&mut stream_write, *inner).await;
                             }
