@@ -111,6 +111,7 @@ struct RespServer {
     watched_keys: Arc<Mutex<HashMap<usize, Vec<(String, bool)>>>>,
     expiry_tx: Sender<Expiry>,
     storage: Arc<Mutex<HashMap<String, Storage>>>,
+    config: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl Clone for RespServer {
@@ -124,6 +125,7 @@ impl Clone for RespServer {
             watched_keys: self.watched_keys.clone(),
             expiry_tx: self.expiry_tx.clone(),
             storage: self.storage.clone(),
+            config: self.config.clone(),
         }
     }
 }
@@ -242,6 +244,7 @@ impl RespServer {
             expiry_tx: tx,
             watched_keys: Arc::new(Mutex::new(HashMap::new())),
             connection_no: SERVER_INDEX.fetch_add(1, atomic::Ordering::Relaxed) as usize,
+            config: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -358,6 +361,7 @@ impl RespServer {
             watched_keys: self.watched_keys.clone(),
             expiry_tx: self.expiry_tx.clone(),
             storage: self.storage.clone(),
+            config: self.config.clone(),
         }
     }
 
@@ -451,6 +455,10 @@ struct CommandLine {
     port: Option<usize>,
     #[arg(short, long)]
     replicaof: Option<String>,
+    #[arg(short, long)]
+    dir: Option<String>,
+    #[arg(short, long)]
+    dbfilename: Option<String>,
 }
 
 #[tokio::main]
@@ -548,7 +556,7 @@ async fn main() {
                         if let Some(ReplicaState::Ready) = cloned_server.get_replica_state() {
                             let cmd_len = cmd_req.command_string.len();
                             let res = cloned_server.visit(cmd_req).await.unwrap();
-                            // ADD incoming bytes to replica offset
+                            // ADD incoming bytes to replica offset after command is processed so responding to get ack doesnt include the offset for the statement itself
                             offset.fetch_add(cmd_len, atomic::Ordering::Relaxed);
                             if let CommandResponse::ReplicaResponse(inner) = res {
                                 send_command_responses(&mut stream_write, *inner).await;
