@@ -34,39 +34,43 @@ impl RespServer {
             {
                 return Ok(CommandResponse::Single(format_integer_string(0)));
             }
-            {
-                let response_string = format_array(&[
-                    format_bulk_string(String::from("REPLCONF")),
-                    format_bulk_string(String::from("GETACK")),
-                    format_bulk_string(String::from("*")),
-                ]);
-                // get current offset and increment by the repl conf
-                let current_offset = master_offset.load(std::sync::atomic::Ordering::Relaxed);
-                println!("wait command current offset {}", current_offset);
-                self.replicate_command(response_string).await;
 
-                let mut replicas_acked = 0;
-
-                let notify_loop = async {
-                    loop {
-                        ack_notifier.notified().await;
-                        replicas_acked = check_replica_offset(replicas, current_offset);
-
-                        if replicas_acked >= num_replicas {
-                            break;
-                        }
-                    }
-                };
-
-                tokio::select! {
-                    _ = notify_loop => {},
-                    _ = tokio::time::sleep(Duration::from_millis(timeout)) => {}
-
-                };
+            let response_string = format_array(&[
+                format_bulk_string(String::from("REPLCONF")),
+                format_bulk_string(String::from("GETACK")),
+                format_bulk_string(String::from("*")),
+            ]);
+            // get current offset and increment by the repl conf
+            let current_offset = master_offset.load(std::sync::atomic::Ordering::Relaxed);
+            if current_offset == 0 {
                 return Ok(CommandResponse::Single(format_integer_string(
-                    replicas_acked as isize,
+                    connected_slaves.load(std::sync::atomic::Ordering::Relaxed) as isize,
                 )));
             }
+            println!("wait command current offset {}", current_offset);
+            self.replicate_command(response_string).await;
+
+            let mut replicas_acked = 0;
+
+            let notify_loop = async {
+                loop {
+                    ack_notifier.notified().await;
+                    replicas_acked = check_replica_offset(replicas, current_offset);
+
+                    if replicas_acked >= num_replicas {
+                        break;
+                    }
+                }
+            };
+
+            tokio::select! {
+                _ = notify_loop => {},
+                _ = tokio::time::sleep(Duration::from_millis(timeout)) => {}
+
+            };
+            return Ok(CommandResponse::Single(format_integer_string(
+                replicas_acked as isize,
+            )));
         }
         Ok(CommandResponse::Single(format_error_string(
             "WAIT command must be sent to master",
