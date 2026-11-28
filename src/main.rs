@@ -502,7 +502,17 @@ async fn main() {
         }
     };
 
-    let server = RespServer::new(role);
+    let mut server = RespServer::new(role);
+    if let Some(dir) = cli.dir {
+        server.config.lock().unwrap().insert("dir".to_string(), dir);
+    }
+    if let Some(dbfilename) = cli.dbfilename {
+        server
+            .config
+            .lock()
+            .unwrap()
+            .insert("dbfilename".to_string(), dbfilename);
+    }
 
     if let ServerRole::Slave {
         master_host,
